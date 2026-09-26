@@ -1,0 +1,18 @@
+# Secrets
+.env
+.env.*
+*.json.key
+kaggle.json
+
+# Data (downloaded from Kaggle)
+data/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+artifacts/
