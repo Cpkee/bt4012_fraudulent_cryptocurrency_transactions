@@ -112,6 +112,42 @@ def rank_blend_fit_predict(factories: dict, weights: dict):
     return fit_predict
 
 
+# Step 3: random search (artifacts/lgbm_search.csv), then a leaves x rounds grid around
+# the winner (artifacts/lgbm_search_confirm.csv), each confirmed with five seeds. The
+# optimum is far shallower than the default: 7 leaves, 600 rounds at lr 0.05, no row
+# subsampling. Horizon fold 0.9147 -> 0.9420, hard fold 0.9568 -> 0.9675, 3-fold
+# 0.9821 -> 0.9854, PR-AUC 0.9180 -> 0.9262 (five seeds, v2b features).
+LGBM_TUNED = dict(
+    n_estimators=600, learning_rate=0.05, num_leaves=7, min_child_samples=40,
+    colsample_bytree=0.6, subsample=1.0, subsample_freq=1, reg_lambda=1.0, reg_alpha=0.0,
+    verbose=-1, n_jobs=-1,
+)
+
+
+LGBM_SEARCH_SPACE = {
+    "num_leaves": [15, 31, 63, 127],
+    "min_child_samples": [10, 20, 40, 80, 160],
+    "colsample_bytree": [0.3, 0.5, 0.6, 0.8],
+    "subsample": [0.6, 0.8, 1.0],
+    "reg_lambda": [0.0, 1.0, 5.0, 20.0],
+    "reg_alpha": [0.0, 1.0, 5.0],
+    "learning_rate": [0.02, 0.03, 0.05],
+}
+ROUNDS_TIMES_LR = 9.0   # the step-1 choice, 300 rounds x 0.03
+
+
+def sample_lgbm_params(rng, n: int):
+    """Random configurations from LGBM_SEARCH_SPACE. Rounds scale with the
+    learning rate so every configuration sees the same total shrinkage."""
+    out = []
+    for _ in range(n):
+        p = {k: v[rng.integers(len(v))] for k, v in LGBM_SEARCH_SPACE.items()}
+        p["n_estimators"] = int(round(ROUNDS_TIMES_LR / p["learning_rate"]))
+        p["subsample_freq"] = 1
+        out.append(p)
+    return out
+
+
 def time_order(*frames, time_step: pd.Series):
     """Stable-sort frames/series by time_step so the LightGBM tail is the most recent rows."""
     order = np.argsort(time_step.to_numpy(), kind="stable")

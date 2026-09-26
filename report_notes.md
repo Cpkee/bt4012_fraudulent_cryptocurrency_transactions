@@ -322,6 +322,41 @@ columns + 9 drifting continuous columns replaced by their within-step percentile
 (`feat_2, 106, 107, 109, 142, 115, 143, 151, 145`). No graph features, no recency weights, no
 score-level correction.
 
+### Architecture of the final model
+
+![Architecture of the final model: inputs, feature cleaning, per-step normalisation, five-seed LightGBM, output; validation loop above, rejected branches below](figures/model_architecture.png)
+
+_Vector version for the PDF: `figures/model_architecture.svg`; regenerate with
+`.venv/bin/python figures/architecture.py`._ The same pipeline as Mermaid, for viewers that
+render it (GitHub, VS Code):
+
+```mermaid
+flowchart LR
+    subgraph IN[Inputs]
+        A1[train.csv<br/>141,772 tx, steps 1-35<br/>165 features, 78% unlabelled]
+        A2[test.csv<br/>15,329 tx, steps 36-49]
+        A3[txs_edgelist.csv<br/>234,355 edges]
+    end
+    B[Feature cleaning<br/>drop 6 period identifiers<br/>adversarial validation AUC > 0.95<br/>159 features, 31,235 labelled rows]
+    C[Per-step normalisation<br/>9 drifting continuous features<br/>replaced by within-step percentile rank<br/>computed inside each period]
+    D[LightGBM x 5 seeds<br/>300 rounds, lr 0.03, 31 leaves<br/>80% rows / 60% columns per tree<br/>no class weight]
+    E[P illicit per transaction<br/>submission.csv]
+    V[Validation: rolling-origin folds by time_step<br/>1-14 to 15-21, 1-21 to 22-28, 1-28 to 29-35<br/>horizon fold 1-21 to 22-35]
+    A1 --> B --> C --> D --> E
+    A2 --> B
+    V -. selects rounds, features, seeds .-> D
+    V -. adversarial validation .-> B
+    A3 -. graph features: tested, rejected .-> B
+    R1[Recency weighting: rejected] -.-> D
+    R2[Score-level prior correction: rejected] -.-> E
+    R3[RF and Isolation Forest blends: rejected] -.-> E
+```
+
+How to read it: the solid path is the model behind sub_04. Everything grey or dashed was run
+on the same folds and rejected; the diagram doubles as the summary of section 2.3. Two loops feed
+the pipeline from the validation block: adversarial validation decides which columns are cleaned
+or normalised, and rolling CV decides the round count, the feature variant and the seed bag.
+
 Rolling CV: three 7-step folds 0.9822, hard fold 0.9567, 14-step horizon fold 0.9135 (step-1
 features with the same bagging: 0.9819 / 0.9555 / 0.8966). The horizon fold is the one that
 predicts the leaderboard: step 1's single-seed model scored 0.894 there against a public LB of
@@ -340,7 +375,115 @@ Public LB column: see `results.md` after upload.
 
 ---
 
+## Step 3 — LightGBM hyperparameter search, and the GNN
+
+### 2.2 (cont.) Hyperparameter search (notebook §16)
+
+Until this point the tree parameters were conventional defaults (31 leaves, 80% row and 60%
+column subsampling, λ = 1, lr 0.03 × 300 rounds); only the round count and the class weight
+had been examined. Motivation: the seed spread of 0.016 on the horizon fold suggests a
+higher-variance model than necessary.
+
+Method: random search, 40 configurations over `num_leaves` {15, 31, 63, 127},
+`min_child_samples` {10, 20, 40, 80, 160}, `colsample_bytree` {0.3, 0.5, 0.6, 0.8}, `subsample`
+{0.6, 0.8, 1.0}, λ {0, 1, 5, 20}, α {0, 1, 5}, lr {0.02, 0.03, 0.05} with rounds = 9 / lr. v2b
+features, four folds, three seeds; ranked by the horizon fold with the 7-step mean as a guardrail
+(no drop beyond 0.001). Top three confirmed with five seeds; adoption rule +0.002 on the horizon
+fold without loss on the 7-step mean.
+
+Five-seed confirmation:
+
+| configuration | leaves | min leaf | col frac | row frac | λ / α | lr × rounds | 3-fold | hard 22–28 | horizon 22–35 | seed std (horizon) | PR-AUC |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| baseline (steps 1–2) | 31 | 20 | 0.6 | 0.8 | 1 / 0 | 0.03 × 300 | 0.9821 | 0.9568 | 0.9147 | 0.0041 | 0.9180 |
+| **cfg11 (adopted)** | **15** | **40** | 0.6 | **1.0** | 1 / 0 | **0.05 × 180** | **0.9834** | **0.9614** | **0.9278** | 0.0042 | 0.9202 |
+| cfg13 | 127 | 160 | 0.5 | 1.0 | 1 / 0 | 0.05 × 180 | 0.9832 | 0.9596 | 0.9234 | 0.0067 | 0.9205 |
+| cfg03 | 31 | 10 | 0.8 | 1.0 | 5 / 1 | 0.05 × 180 | 0.9823 | 0.9595 | 0.9212 | 0.0070 | 0.9164 |
+
+The adopted configuration improves every metric: +0.013 on the horizon fold, +0.0013 on the
+7-step mean, +0.005 on the hard fold, with unchanged seed variance. Two patterns in the full
+search (`artifacts/lgbm_search.csv`):
+
+- Every configuration with heavy regularisation (λ = 20 or α = 5) or a 30% column fraction sits
+  0.02–0.09 below the baseline on the horizon fold. Strong shrinkage of leaf values removes the
+  minority-class signal before it can be ranked.
+- All configurations above the baseline use **no row subsampling** and a faster learning rate
+  with fewer rounds. Row subsampling adds variance that the temporal shift then amplifies;
+  smaller trees (15 leaves) generalise further ahead than deeper ones.
+
+**The search winner was not on a plateau.** A leaves × rounds grid around cfg11 showed the
+horizon fold still rising towards fewer leaves and more rounds, so the grid was extended
+(three seeds, other parameters as cfg11):
+
+| leaves \ rounds | 180 | 270 | 400 | 600 | 900 |
+|---|---|---|---|---|---|
+| 3 | | 0.9279 | 0.9329 | 0.9303 | 0.9316 |
+| 5 | | 0.9380 | 0.9384 | 0.9376 | 0.9397 |
+| **7** | | 0.9347 | 0.9399 | **0.9415** | 0.9412 |
+| 9 | | | | 0.9378 | 0.9382 |
+| 11 | | | | 0.9337 | 0.9344 |
+| 15 | 0.9256 | 0.9254 | | | |
+| 31 | 0.9208 | 0.9133 | | | |
+
+Five-seed confirmation of the plateau:
+
+| configuration | 3-fold | hard 22–28 | horizon 22–35 | seed spread | PR-AUC |
+|---|---|---|---|---|---|
+| baseline, 31 leaves × 300 rounds at lr 0.03, row subsample 0.8 | 0.9821 | 0.9568 | 0.9147 | 0.0086 | 0.9180 |
+| cfg11, 15 leaves × 180 at lr 0.05 | 0.9834 | 0.9614 | 0.9278 | 0.0112 | 0.9202 |
+| 7 leaves × 400 | 0.9846 | 0.9651 | 0.9396 | 0.0062 | 0.9240 |
+| **7 leaves × 600 (adopted)** | **0.9854** | **0.9675** | **0.9420** | 0.0078 | **0.9262** |
+| 7 leaves × 900 | 0.9854 | 0.9679 | 0.9419 | 0.0070 | 0.9269 |
+
+The optimum is much shallower than the default: trees with 7 leaves (depth about 3) boosted for
+600 rounds beat 31-leaf trees on every fold, and the margin grows with the horizon (+0.003 on the
+7-step folds, +0.011 on the hard fold, +0.027 at 14 steps ahead). Interpretation: high-order
+feature interactions learned by deep trees are specific to the training period and do not
+transfer; low-order structure does. This is the same lesson as the negative results for
+neighbour aggregates and recency weighting, seen from the model side: under drift, capacity
+that fits the period is capacity that fails ahead of it. Rounds beyond 600 add nothing, and
+9 or 11 leaves are already worse.
+
+Final tuned model: LightGBM, 7 leaves, minimum 40 rows per leaf, 60% columns per tree, all
+rows, λ = 1, lr 0.05 × 600 rounds, five-seed bag, v2b features → **sub_07**. As a five-seed bag
+on the same folds (notebook §16b, three outer seeds): 3-fold 0.9852, hard fold 0.9668, horizon
+fold 0.9405, PR-AUC 0.9258, against 0.9822 / 0.9567 / 0.9135 / 0.9180 for sub_04. Its ranking
+correlates 0.955 with sub_04's, less than any previous pair, so this is the first change large
+enough that the leaderboard should be able to see it. Artifacts: `artifacts/lgbm_search*.csv`.
+
+---
+
 ## 3. Results and discussion — pointers
+
+### Public leaderboard after step 2, and what a leaderboard number can and cannot say
+
+| submission | model | CV 3-fold | CV horizon | public LB |
+|---|---|---|---|---|
+| sub_03 | cleaned raw, single seed | 0.9819 | 0.8941 | 0.9451 |
+| sub_06 | cleaned raw, bagged ×5 | 0.9819 | 0.8966 | 0.9398 |
+| sub_04 | v2b rank-normalised, bagged ×5 (primary) | 0.9822 | 0.9135 | 0.9420 |
+| sub_05 | v2 incl. discrete ranks, bagged ×5 | 0.9815 | 0.9173 | 0.9437 |
+
+Against their proper controls the step-2 changes moved in the direction CV predicted
+(normalisation +0.002 over sub_06, discrete ranks +0.002 over sub_04) but by far less than the
+horizon fold suggested, and bagging alone appears to *lose* 0.005 against the single-seed model.
+Three measurements explain this:
+
+- **Seed spread.** Five seeds of the same model score 0.8927–0.9087 on the horizon fold, a spread
+  of 0.016. A single-seed submission is one draw from that range; sub_03's seed 0 is below the
+  five-seed average on CV, so its public score is sampling luck, not a better model.
+- **Subsample noise.** The public leaderboard is 30% of the test set. Re-drawing 30% subsets of
+  the horizon fold gives an AUC standard deviation of 0.006 for the same predictions.
+- **The submissions are nearly the same ranking.** Spearman correlation between any two of the
+  four files is 0.98–0.996.
+
+So differences below roughly 0.008 on the public leaderboard are not readable, every step-2
+delta is inside that band, and the bagged model remains the right choice for the private
+leaderboard (70% of test, about half the noise). The practical rule adopted from here: decisions
+are made on rolling CV with three or more seeds; the leaderboard is used to confirm direction
+only. This is also why the report leads with CV tables and treats the public score as one noisy
+observation.
+
 
 - Report ROC AUC (competition metric) alongside PR-AUC and per-step AUC; at an 11.7% positive
   rate PR-AUC is the more informative number for investigator load.
