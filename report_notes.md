@@ -9,10 +9,11 @@ exploration and final strategy, 3 results, 4 reflection).
 
 ## 1. Problem and approach (for the Introduction)
 
-The data is the Elliptic Bitcoin transaction graph (Weber et al. 2019): 203,769 transactions,
-234,355 directed payment-flow edges, 165 anonymised features and 49 time steps. The competition
-re-cuts it as a temporal task: train = steps 1–35 (141,772 rows, 78% unlabelled), test = steps
-36–49 (15,329 labelled rows only). Metric: ROC AUC on the pooled test ranking.
+The data is a graph of Bitcoin transactions: 203,769 transaction ids appear in the edge list,
+234,355 directed payment-flow edges, 165 anonymised features per transaction and 49 time steps.
+It is split in time: train = steps 1–35 (141,772 rows, 78% unlabelled), test = steps 36–49
+(15,329 labelled rows only). Metric: ROC AUC on the pooled test ranking. Everything below is
+measured on these files; no external description of the data is used as evidence.
 
 Three properties of the data drove every decision:
 
@@ -20,8 +21,7 @@ Three properties of the data drove every decision:
    travel through the graph into the test period; graph features must be structural and
    computed inside each period.
 2. **The base rate drifts hard**: the labelled fraud rate per step ranges from 0.43% to 35.97%
-   (an 84× swing), and the test window is known from the literature to contain a dark-market
-   shutdown at step 43 after which illicit patterns change (Weber et al. 2019).
+   (an 84× swing) within the training period alone, and the test period's rates are unknown.
 3. **Only labelled test-period nodes are shipped.** Their 46,668 unlabelled neighbours exist in
    the edge list as ids only, so neighbour-feature aggregates see fewer neighbours on test than
    on train unless the train side is computed the same way.
@@ -56,11 +56,11 @@ AUC 1.000 on the raw features. Tested one at a time, six columns each identify t
 | feat_139 | 0.977 | 0.954 | 0% |
 | feat_137 | 0.941 | 0.896 | 0% |
 
-Their per-step medians rise almost linearly with time. In the original Elliptic construction the
-aggregated features (94–165) summarise neighbours' local features, and local feature 1 is the
-time step itself, so these are almost certainly neighbour aggregates of the time step. A tree
-model splits on them to learn *when* a transaction happened; on the test period nearly every
-value falls in the newest leaf. They were removed from every model (159 features remain).
+Their per-step medians rise almost linearly with time, and all six sit in the block of columns
+(94–165) whose values behave like neighbourhood summaries, so they are most plausibly aggregates
+of a time-like quantity over neighbours. Whatever their construction, a tree model splits on them
+to learn *when* a transaction happened; on the test period nearly every value falls in the newest
+leaf. They were removed from every model (159 features remain).
 Removing them costs nothing on rolling CV (0.9737 → 0.9726, within seed noise).
 
 The cleaned set still scores 0.997 on adversarial validation, driven by `feat_2`, `feat_106`,
@@ -98,8 +98,8 @@ to build graph neighbourhoods but never enter the loss or the metric.
 | random forest (500 trees, balanced subsample) | 0.9651 | 0.9681 | 0.9413 |
 | LightGBM, early stopping on recent 15% + `scale_pos_weight` | 0.9737 | 0.9735 | 0.9279 |
 
-Random Forest is the strongest published baseline on this data (Weber et al. 2019: illicit F1
-0.788 vs lower for GCN); here LightGBM overtakes it once configured for the metric (next table).
+Random Forest is the strongest of the three on PR-AUC; LightGBM overtakes it on the competition
+metric once configured for it (next table).
 
 ### Class imbalance and boosting rounds
 
@@ -131,9 +131,8 @@ at conventional values and not tuned further.
 | **ablation: edges randomly rewired within each step, same columns** | **0.9741** | 0.9372 |
 
 No graph family improves the cleaned raw set; the neighbour aggregates hurt the hard fold, and
-the rewired graph scores the same as the real one. This matches the 2026 re-evaluation of GNNs
-on Elliptic under temporal shift (arXiv 2604.19514), which finds that the real topology carries
-no forward-transferable signal beyond the node features. The final step-1 model uses no graph
+the rewired graph scores the same as the real one. On this data the topology carries no
+forward-transferable signal beyond the node features. The final step-1 model uses no graph
 features; the graph work is reported as an ablation.
 
 ---
@@ -147,7 +146,7 @@ pooled AUC on rolling CV among models without period identifiers.
 Final step-1 model: LightGBM, 159 cleaned raw features, 300 rounds, unweighted, fitted on all
 31,235 labelled rows of steps 1–35.
 
-### Public leaderboard (30% of test, ~4,600 rows; 20 entries, top 0.9573, median 0.9494)
+### Public leaderboard (30% of test, ~4,600 rows; 20 entries, top 0.9573, median 0.9494 as of 26 Sep; top 0.9636 on 27 Sep)
 
 | submission | change being priced | CV AUC | public LB |
 |---|---|---|---|
@@ -157,7 +156,7 @@ Final step-1 model: LightGBM, 159 cleaned raw features, 300 rounds, unweighted, 
 
 Rounds/weighting: +0.009 CV, +0.006 LB. Period identifiers: −0.001 CV, +0.002 LB (inside the
 noise of ~550 public positives). CV-to-LB gap for sub_03: 0.037, attributed to the 14-step
-horizon and the step-43 regime change; step 2 targets it.
+horizon; step 2 targets it.
 
 ---
 
@@ -451,6 +450,114 @@ fold 0.9405, PR-AUC 0.9258, against 0.9822 / 0.9567 / 0.9135 / 0.9180 for sub_04
 correlates 0.955 with sub_04's, less than any previous pair, so this is the first change large
 enough that the leaderboard should be able to see it. Artifacts: `artifacts/lgbm_search*.csv`.
 
+### 2.2 (cont.) Are the horizon-fold gains specific to one window? (robustness check)
+
+Every step-2 and step-3 decision used one horizon fold (train 1–21 → val 22–35). To rule out
+selection on a single slice of history, the four key models were re-evaluated on eight windows
+whose validation block lies 8–14 steps past the end of training (three seeds, pooled AUC):
+
+| window | raw, default trees | v2b, default trees (sub_04) | raw, tuned trees | v2b, tuned trees (sub_07) |
+|---|---|---|---|---|
+| train 1–7 → val 8–21 | 0.9936 | 0.9769 | 0.9936 | 0.9780 |
+| train 1–7 → val 15–21 | 0.9897 | 0.9684 | 0.9902 | 0.9712 |
+| train 1–10 → val 18–24 | 0.9366 | 0.9413 | 0.9330 | 0.9525 |
+| train 1–14 → val 15–28 | 0.9619 | 0.9656 | 0.9569 | 0.9765 |
+| train 1–14 → val 22–28 | 0.9261 | 0.9373 | 0.9096 | 0.9608 |
+| train 1–17 → val 25–31 | 0.8546 | 0.8980 | 0.8795 | 0.9341 |
+| train 1–21 → val 22–35 | 0.8961 | 0.9133 | 0.8919 | 0.9415 |
+| train 1–21 → val 29–35 | 0.8367 | 0.8723 | 0.8390 | 0.9163 |
+| **mean** | 0.9244 | 0.9341 | 0.9242 | **0.9539** |
+| **worst window** | 0.8367 | 0.8723 | 0.8390 | **0.9163** |
+
+The tuned v2b model wins on six of eight windows, by 0.03–0.08 on the hard ones, and raises the
+worst case by 0.08. On the two windows trained on only seven steps it trails the raw model by
+0.015, where the within-step ranks have too few training periods to be learned. Two further
+observations: the tuning helps only in combination with the normalised features (tuned trees on
+raw features are no better than default trees), and the improvements are largest exactly where
+the baseline is weakest. The gains are therefore a property of the model, not of the fold they
+were selected on. Artifact: `artifacts/cv_far_windows.csv`.
+
+### 3 (preview). What the test period looks like from the models' side
+
+sub_07 scored 0.9403 on the public leaderboard, 0.0017 below sub_04, despite +0.027 on the
+horizon fold and consistent gains on eight far-horizon windows. All seven submissions so far lie
+between 0.9390 and 0.9451, a band equal to the leaderboard's own noise (std 0.006). The test
+predictions themselves explain why:
+
+| test steps | mean predicted P(illicit), sub_07 | share of rows scored > 0.5 | for reference: labelled fraud rate, train steps 29–35 |
+|---|---|---|---|
+| 36–42 | 0.085 | 7.4% | 5–28% |
+| 43–49 | 0.022 | 0.5% | |
+
+From step 43 onward every model we built scores almost every transaction as licit: sub_03,
+sub_04 and sub_07 agree on this (mean predicted rate 0.006–0.038 per step, against 0.027–0.139
+for steps 36–42), and the change is abrupt rather than gradual. The data cannot say why: either
+illicit activity really fell from step 43, or it continued in a form that looks like nothing in
+steps 1–35. Raw features after step 43 are no more distinguishable from those before it than any
+two adjacent periods are (adversarial AUC 0.969 against 0.957–0.983 for reference pairs), so the
+inputs did not visibly change character. In either case the second half of the test set
+contributes little to the pooled AUC that any model can influence, and the first half is where
+all our models already agree (within-step rank correlation 0.93–0.97). That is why 0.03 of CV improvement
+on historical windows moves the public score by less than its noise, and why the leaderboard is
+compressed into 0.942–0.957 for all twenty entries.
+
+Consequence for model selection: the leaderboard cannot arbitrate between our submissions; the
+far-window CV table above is the evidence, and sub_07 remains the primary. Two cheap probes were
+uploaded to test the one hypothesis the leaderboard *can* see: whether the post-43 scores are
+merely deflated (in which case equalising step means, or ranking within steps, would raise the
+pooled AUC by re-interleaving the halves) or whether they are correctly low. See the ledger.
+
+### 2.3 (cont.) Graph neural networks under a strictly inductive protocol (`gnn.py`)
+
+Protocol. For a fold with training steps ≤ T the training graph holds only nodes with step ≤ T
+and the edges among them; the validation graph holds only the validation block's nodes. Edges
+never cross steps, so the two graphs share no edge (asserted in code). Node features are the
+same 159-column v2b matrix as the LightGBM, z-scored with training-node statistics. Loss is
+unweighted binary cross-entropy on labelled nodes; Adam, lr 1e-3, weight decay 5e-4, hidden
+width 128, dropout 0.3, full-batch, a fixed epoch count chosen on CV (100 / 200 / 400 → 200 for
+both models), three seeds. The graph is the labelled-node graph (31,235 nodes, 23,900 edges),
+which mirrors the test file; a second variant adds the 110,537 unlabelled train nodes as
+message-passing context (141,772 nodes, 163,194 edges).
+
+| model | 3-fold | hard 22–28 | horizon 22–35 | PR-AUC | far-window mean | far-window min |
+|---|---|---|---|---|---|---|
+| MLP, same width and depth, **no edges** (control) | 0.9526 | 0.9396 | 0.8832 | 0.8234 | 0.9095 | 0.8253 |
+| GraphSAGE + linear skip, real edges | 0.9495 | 0.9266 | 0.8593 | 0.8118 | 0.8897 | 0.7979 |
+| GraphSAGE, edges randomly rewired within step | 0.9467 | 0.9309 | 0.8683 | 0.8037 | 0.9001 | 0.8056 |
+| GraphSAGE, full graph with unlabelled nodes as context | 0.9540 | 0.9306 | 0.8709 | 0.8137 | 0.8973 | 0.8114 |
+| **tuned LightGBM, same features (reference)** | **0.9853** | **0.9676** | **0.9415** | **0.9260** | **0.9539** | **0.9163** |
+
+Three comparisons, each answering one question on this data alone:
+
+- **GNN vs MLP: does message passing help?** No. With everything else identical, adding the
+  real edges lowers every metric (−0.024 on the horizon fold, −0.020 on the far-window mean).
+- **Real vs rewired edges: is it the topology?** The rewired graph scores *higher* than the real
+  one at the horizon (+0.009) and on the far windows (+0.010). Whatever the real edges encode
+  about a period, it transfers worse than random neighbourhoods of the same degree.
+- **Labelled-only vs full graph: does the parity gap matter?** Unlabelled context lifts the
+  7-step folds by 0.005 and the horizon by 0.012, but the full-graph GNN still trails the
+  edge-free MLP at the horizon and on the far windows.
+
+The whole neural family sits about 0.03 below the boosted trees on the same features. The
+architectures were not tuned beyond the epoch count, so the absolute gap is an upper bound on
+what tuning could recover; the *ordering* MLP > GNN is the robust finding, and it agrees with
+the step-1 feature ablation (rewired-edge features scored the same as real ones) from a
+different direction.
+
+Hybrids, evaluated on the same folds with the GNN outputs precomputed per fold (`gnn_cache.py`):
+
+| hybrid | 3-fold | hard 22–28 | horizon 22–35 | PR-AUC | far-window mean | far-window min |
+|---|---|---|---|---|---|---|
+| GraphSAGE embeddings (64-d) appended to the LightGBM features | 0.9721 | 0.9467 | 0.8964 | 0.8904 | 0.8891 | 0.7917 |
+| rank blend, 85% LightGBM + 15% GraphSAGE | 0.9838 | 0.9641 | 0.9339 | 0.9209 | 0.9497 | 0.9051 |
+| reference LightGBM | 0.9853 | 0.9676 | 0.9415 | 0.9260 | 0.9539 | 0.9163 |
+
+The embedding hybrid is the worst configuration in the project: the training rows' embeddings
+come from a network that saw their labels, so the trees learn to trust them and lose 0.065 on
+the far windows. The blend is a small, uniform loss. Neither carries anything from the graph
+into the final model. Artifacts: `artifacts/cv_gnn_summary.csv`, `artifacts/cv_gnn.csv`,
+`artifacts/probe_gnn_embed.json`, `artifacts/probe_gnn_blend.json`.
+
 ---
 
 ## 3. Results and discussion — pointers
@@ -460,14 +567,17 @@ enough that the leaderboard should be able to see it. Artifacts: `artifacts/lgbm
 | submission | model | CV 3-fold | CV horizon | public LB |
 |---|---|---|---|---|
 | sub_03 | cleaned raw, single seed | 0.9819 | 0.8941 | 0.9451 |
-| sub_06 | cleaned raw, bagged ×5 | 0.9819 | 0.8966 | 0.9398 |
+| sub_06 | cleaned raw, bagged ×5 | 0.9819 | 0.8966 | 0.9437 |
 | sub_04 | v2b rank-normalised, bagged ×5 (primary) | 0.9822 | 0.9135 | 0.9420 |
-| sub_05 | v2 incl. discrete ranks, bagged ×5 | 0.9815 | 0.9173 | 0.9437 |
+| sub_05 | v2 incl. discrete ranks, bagged ×5 | 0.9815 | 0.9173 | 0.9398 |
 
-Against their proper controls the step-2 changes moved in the direction CV predicted
-(normalisation +0.002 over sub_06, discrete ranks +0.002 over sub_04) but by far less than the
-horizon fold suggested, and bagging alone appears to *lose* 0.005 against the single-seed model.
-Three measurements explain this:
+_Corrected 2026-09-27: the public scores of sub_05 and sub_06 were swapped in the ledger;
+the values above are from the Kaggle API._
+
+Against their proper controls every step-2 change moved *against* the CV prediction on the
+public board: normalisation −0.0017 vs sub_06, discrete ranks −0.0022 vs sub_04, and bagging
+−0.0014 vs the single-seed model, although the horizon fold predicted gains of +0.017 and
++0.004 for the first two. Each delta is small. Three measurements put them in context:
 
 - **Seed spread.** Five seeds of the same model score 0.8927–0.9087 on the horizon fold, a spread
   of 0.016. A single-seed submission is one draw from that range; sub_03's seed 0 is below the
@@ -491,8 +601,9 @@ observation.
   identifiers' per-step median (linear in time, shaded test period); validation AUC per time
   step for raw vs cleaned models; top-30 feature importances (graph vs raw colour-coded).
 - Strengths: leakage-free protocol; every modelling choice priced on CV and, where possible,
-  on the leaderboard as a controlled pair. Limitations: no model can learn post-shutdown
-  patterns absent from training; the public LB is small.
+  on the leaderboard as a controlled pair. Limitations: no model can learn patterns absent from
+  the training period, and the models' predictions show a discontinuity at step 43 whose cause
+  the data cannot reveal; the public LB is small.
 
 ## 4. Reflection — pointers
 
@@ -503,8 +614,13 @@ observation.
 
 ## References
 
+Methods used:
+
+- Saerens, Latinne & Decaestecker 2002, Adjusting the outputs of a classifier to new a priori probabilities. https://ieeexplore.ieee.org/document/6789726
+- Lipton, Wang & Smola 2018, Detecting and Correcting for Label Shift with Black Box Predictors. https://arxiv.org/abs/1802.03916
+
+Related work consulted for context only; no statement about this dataset is taken from them:
+
 - Weber et al. 2019, Anti-Money Laundering in Bitcoin: Experimenting with GCNs for Financial Forensics. https://arxiv.org/abs/1908.02591
 - When Graph Structure Becomes a Liability: A Critical Re-Evaluation of GNNs for Bitcoin Fraud Detection under Temporal Distribution Shift (2026). https://arxiv.org/abs/2604.19514
 - Elmougy & Liu 2023, Demystifying Fraudulent Transactions and Illicit Nodes in the Bitcoin Network (KDD). https://arxiv.org/abs/2306.06108
-- Saerens, Latinne & Decaestecker 2002, Adjusting the outputs of a classifier to new a priori probabilities. https://ieeexplore.ieee.org/document/6789726
-- Lipton, Wang & Smola 2018, Detecting and Correcting for Label Shift with Black Box Predictors. https://arxiv.org/abs/1802.03916
