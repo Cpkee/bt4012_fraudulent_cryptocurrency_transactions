@@ -28,7 +28,7 @@ slots is a day of lost information: there should always be readable candidates b
    within ±0.005 tie (simpler model wins), < −0.005 rejected. Noise: a 5-seed bag re-seeded moves
    the public score by ≈ 0.001 (measured 2026-10-02); differences between *different* models of
    0.002–0.003 are therefore more meaningful than the ±0.005 band assumed earlier.
-6. **Ledger**: every file goes in `results.md` before upload with CV numbers and the nearest scored
+6. **Ledger**: every file goes in `docs/results.md` before upload with CV numbers and the nearest scored
    file; the public score is filled in after. `BOARD` in `families.py` mirrors scored files.
 7. Never use `time_step` as a model input; it is for splitting, windows, weights and per-step
    statistics only.
@@ -160,15 +160,18 @@ Read 2026-10-04: model B's learner closed (XGBoost −0.002, CatBoost −0.010, 
 Read 2026-10-05: **random 5-fold OOF scoring of training rows = +0.0023, new best**; label
 information in training neighbour numbers hurts monotonically (closed). The new axis: make the
 training-row scorer and the test-row scorer as alike as possible. Plan with candidates, reading
-rules and follow-ups: **`plan_step6.md`** (10-fold OOF; model B at 7 leaves and the 21-step window
+rules and follow-ups: **`docs/plans/plan_step6.md`** (10-fold OOF; model B at 7 leaves and the 21-step window
 re-checked under the new protocol; in reserve, test rows scored by the average of the OOF fold
 models). Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
-(GPU switch, Kaggle paths) was added outside this session; `plan_step1..3.md` were deleted from
-the working tree (still in the last commit).
+(GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules
+in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `docs/` (see file map).
 
 ## Future implementation notes
 
+- Run scripts from anywhere as `.venv/bin/python src/families.py <name>` (also `src/probes.py`,
+  `src/gnn_cache.py`). Repo locations (`submissions/`, `artifacts/`, the ledger, the data cache)
+  come from `src/paths.py`; never hard-code a cwd-relative path in a module.
 - New variants go in `families.py` (`FAMILIES` dict). Patterns: `lgbm_recent`,
   `lgbm_recency_weighted`, `two_stage(last_k, half_life, b_params, a_all_history, hop2, unlab)`,
   `two_stage_iter2`. The CV sanity check, distinctness gate, file naming and ledger row are
@@ -179,22 +182,27 @@ the working tree (still in the last commit).
   PyTorch hang together in one process on macOS.
 - A two-stage build takes ~30 min (model A once per training step, × folds × seeds); queue builds
   behind each other rather than running them concurrently.
-- Full notebook execution (`main.ipynb`, 55 cells) takes ~2 h; it re-runs every experiment.
+- Full notebook execution (`notebooks/main.ipynb`, 55 cells) takes ~2 h; it re-runs every experiment.
 
 ## File map
 
-| file | role |
+| path | role |
 |---|---|
-| `final_model.ipynb` / `final_model_kaggle.ipynb` | **the submission notebooks** (local / Kaggle with GPU switch): self-contained, raw files → CSV for the current best model; rename to the student number for hand-in |
-| `main.ipynb` | experiment notebook, sections 5–16 (steps 1–3), executed; steps 5–6 live in `families.py` + ledger |
-| `validation.py` | rolling-origin folds, horizon fold, per-step AUC, gap metric |
-| `models.py` | LightGBM factories (`LGBM_PARAMS` = reference, `LGBM_TUNED`), RF/logreg, adversarial validation, search space |
-| `drift.py` | recency weights, `StepNormalizer`, EM/BBSE prior estimation, score adjustment |
-| `graph_features.py` | per-period topology and neighbour aggregates, edge rewiring |
-| `gnn.py`, `gnn_cache.py` | inductive GraphSAGE/MLP and the cache builder |
-| `probes.py` | step-4 probe factory (sub_07 reference; superseded) — `Data` class still used by `families.py` |
-| `families.py` | current campaign: reference recipe, windows, weights, two-stage, distinctness gate, ledger rows |
-| `results.md` | ledger of every file with CV and public score |
-| `report_notes.md` | methodology and results write-up with every table; `figures/` diagrams |
-| `plan_step4..6.md` | step plans (`plan_step6.md` = the current round); `instructions.md` competition reference |
-| `submissions/` | every CSV; `artifacts/` (gitignored) CV tables and caches |
+| `final_model.ipynb` / `final_model_kaggle.ipynb` | **the submission notebooks** (local / Kaggle with GPU switch): self-contained, raw files → CSV for the current best model; rename to the student number for hand-in. Stay at the root: they write `submission.csv` here and check against `submissions/` |
+| `submission.csv` | output of the last `final_model*.ipynb` run |
+| `src/families.py` | current campaign: reference recipe, windows, weights, two-stage, distinctness gate, ledger rows |
+| `src/probes.py` | step-4 probe factory (sub_07 reference; superseded) — `Data` class still used by `families.py` |
+| `src/validation.py` | rolling-origin folds, horizon fold, per-step AUC, gap metric |
+| `src/models.py` | LightGBM factories (`LGBM_PARAMS` = reference, `LGBM_TUNED`), RF/logreg, adversarial validation, search space |
+| `src/drift.py` | recency weights, `StepNormalizer`, EM/BBSE prior estimation, score adjustment |
+| `src/graph_features.py` | per-period topology and neighbour aggregates, edge rewiring |
+| `src/gnn.py`, `src/gnn_cache.py` | inductive GraphSAGE/MLP and the cache builder |
+| `src/kaggle_data.py` | competition download (KGAT_ token from `.env`) into `~/.cache/bt4012` |
+| `src/paths.py` | repo root, `submissions/`, `artifacts/`, ledger and data-cache locations |
+| `notebooks/main.ipynb` | experiment notebook, sections 5–16 (steps 1–3), executed; its first code cell moves the kernel to the repo root and puts `src/` on the path. Steps 5–6 live in `src/families.py` + ledger |
+| `docs/results.md` | ledger of every file with CV and public score |
+| `docs/report_notes.md` | methodology and results write-up with every table; `docs/figures/` diagrams |
+| `docs/plans/plan_step1..6.md` | step plans (`plan_step6.md` = the current round) |
+| `docs/instructions.md` | competition reference |
+| `submissions/`, `artifacts/` | (gitignored) every CSV; CV tables, caches and `family_*.json` |
+| `AGENTS.md` | pointer to this file for other agents |

@@ -5,8 +5,8 @@ with exactly one component changed. For every probe this script reports the four
 standard rolling folds and the eight far-horizon windows (the CV veto), writes
 submissions/probe_<name>.csv from a fit on all labelled rows, and appends a ledger row.
 
-    .venv/bin/python probes.py ref identifiers_back topology        # build and submit-ready
-    .venv/bin/python probes.py rank7 --cv-only                       # CV veto only
+    .venv/bin/python src/probes.py ref identifiers_back topology        # build and submit-ready
+    .venv/bin/python src/probes.py rank7 --cv-only                       # CV veto only
 """
 from __future__ import annotations
 
@@ -23,8 +23,9 @@ from sklearn.ensemble import IsolationForest
 from validation import evaluate, FOLDS_WITH_HORIZON
 from models import LGBM_PARAMS, LGBM_TUNED, adversarial_auc
 from drift import StepNormalizer
+from paths import ARTIFACTS, DATA, LEDGER, SUBMISSIONS
 
-D = Path.home() / ".cache/bt4012/bt-4012-competition-2026"
+D = DATA
 FAR = [(1, 7, 15, 21), (1, 14, 22, 28), (1, 21, 29, 35), (1, 10, 18, 24), (1, 17, 25, 31), (1, 7, 8, 21), (1, 14, 15, 28), (1, 21, 22, 35)]
 PROXY = ["feat_136", "feat_101", "feat_103", "feat_100", "feat_139", "feat_137"]
 NORM9 = ["feat_2", "feat_106", "feat_107", "feat_109", "feat_142", "feat_115", "feat_143", "feat_151", "feat_145"]
@@ -205,7 +206,7 @@ def _gnn_setup(d):
 def _gnn_load(d, Xtr, Xva, seed):
     """Locate the cached fold from the row indices: training steps (lo, hi) and validation
     steps (vlo, vhi) of the rows, or the final fit when Xva holds test rows."""
-    cache = Path("artifacts/gnn_cache")
+    cache = ARTIFACTS / "gnn_cache"
     if Xva.index.min() >= len(d.L):
         z = np.load(cache / f"final_s{seed}.npz")
     else:
@@ -267,7 +268,7 @@ def write_submission(d, pred, name):
     sub = d.sample.copy(); sub["target"] = pred
     assert len(sub) == 15_329 and (sub["index"].to_numpy() == d.sample["index"].to_numpy()).all()
     assert sub["target"].between(0, 1).all() and sub["target"].notna().all()
-    path = Path("submissions") / f"probe_{name}.csv"; sub.to_csv(path, index=False); return path
+    path = SUBMISSIONS / f"probe_{name}.csv"; sub.to_csv(path, index=False); return path
 
 
 def ledger_row(name, path, s):
@@ -280,7 +281,7 @@ HEADER = ("\n## Probe campaign (plan_step4.md): one change per file against the 
 
 
 def run(names, cv_only=False):
-    d = Data(); ledger = Path("results.md"); txt = ledger.read_text()
+    d = Data(); ledger = LEDGER; txt = ledger.read_text()
     if "## Probe campaign" not in txt:
         txt += HEADER
     for name in names:
@@ -288,17 +289,17 @@ def run(names, cv_only=False):
         spec = PROBES[name](d)
         s = cv_summary(d, spec, name)
         print(f"  CV 3-fold={s['auc_3fold']:.4f} hard={s['auc_hard']:.4f} horizon={s['auc_horizon']:.4f} PR={s['pr_auc']:.4f} | far mean={s['far_mean']:.4f} min={s['far_min']:.4f} | n={s['n_features']}", flush=True)
-        json.dump(s, open(f"artifacts/probe_{name}.json", "w"), indent=1)
+        json.dump(s, open(ARTIFACTS / f"probe_{name}.json", "w"), indent=1)
         if cv_only:
             continue
         pred = final_predict(d, spec)
         if name == "ref":
-            ref = pd.read_csv(Path("submissions") / REFERENCE_FILE)["target"].to_numpy()
+            ref = pd.read_csv(SUBMISSIONS / REFERENCE_FILE)["target"].to_numpy()
             print(f"  reference check: max |diff| vs {REFERENCE_FILE} = {np.abs(pred - ref).max():.2e}", flush=True)
             continue
         path = write_submission(d, pred, name)
         from scipy.stats import spearmanr
-        ref = pd.read_csv(Path("submissions") / REFERENCE_FILE)["target"].to_numpy()
+        ref = pd.read_csv(SUBMISSIONS / REFERENCE_FILE)["target"].to_numpy()
         print(f"  wrote {path}; Spearman vs reference {spearmanr(pred, ref).correlation:.4f}", flush=True)
         if path.name not in txt:
             txt += ledger_row(name, path, s) + "\n"

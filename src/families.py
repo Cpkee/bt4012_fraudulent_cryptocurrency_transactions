@@ -5,9 +5,9 @@ decide the score, so the board has to compare families. A candidate is worth an 
 if its test ranking differs from every file already scored (Spearman < 0.98). CV here is a
 sanity check (3-fold AUC >= 0.95) and a table for the report, not a veto.
 
-    .venv/bin/python families.py ref                     # reproduce sub_06 (wiring check)
-    .venv/bin/python families.py rf_clean et_clean       # CV, final fit, fam_<name>.csv, ledger row
-    .venv/bin/python families.py blend sub_06 sub_07     # rank-average scored files
+    .venv/bin/python src/families.py ref                     # reproduce sub_06 (wiring check)
+    .venv/bin/python src/families.py rf_clean et_clean       # CV, final fit, fam_<name>.csv, ledger row
+    .venv/bin/python src/families.py blend sub_06 sub_07     # rank-average scored files
 """
 from __future__ import annotations
 
@@ -25,8 +25,9 @@ from sklearn.ensemble import ExtraTreesClassifier
 from models import LGBM_PARAMS, LGBM_TUNED, logreg_fit_predict, rf_fit_predict
 from probes import Data
 from validation import FOLDS_WITH_HORIZON, evaluate
+from paths import ARTIFACTS, LEDGER, SUBMISSIONS
 
-SUBS = Path("submissions")
+SUBS = SUBMISSIONS
 REFERENCE = "sub_06_lgbm_clean_bagged5.csv"
 DISTINCT_MAX, SANITY_MIN = 0.98, 0.95
 
@@ -153,7 +154,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
         return lgb.LGBMClassifier(**{**baseB, "random_state": seed})
 
     # top raw features by gain (step-1 importance table) for the interaction option
-    TOP = list(pd.read_csv("artifacts/lgbm_importance_raw_1to28.csv", index_col=0).index[:b_interact]) if b_interact else []
+    TOP = list(pd.read_csv(ARTIFACTS / "lgbm_importance_raw_1to28.csv", index_col=0).index[:b_interact]) if b_interact else []
 
     def interact(X: pd.DataFrame) -> pd.DataFrame:
         """Pairwise products and ratios of the TOP features, appended for model B only."""
@@ -164,7 +165,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
                 cols[f"ix_{c1}_over_{c2}"] = X[c1].to_numpy() / (np.abs(X[c2].to_numpy()) + 1e-3)
         return pd.concat([X.reset_index(drop=True), pd.DataFrame(cols)], axis=1)
 
-    TOPK = list(pd.read_csv("artifacts/lgbm_importance_raw_1to28.csv", index_col=0).index[:b_topk]) if b_topk else None
+    TOPK = list(pd.read_csv(ARTIFACTS / "lgbm_importance_raw_1to28.csv", index_col=0).index[:b_topk]) if b_topk else None
 
     def fit_B(A_df, y_win, t_win, w, seed):
         """Model B as a classifier (LightGBM or XGBoost), or as a lambdarank ranker."""
@@ -447,7 +448,7 @@ HEADER = ("\n## Step 5: model families (plan_step5.md)\n\n"
 
 
 def append_ledger(path: Path, desc: str, n_features, cv: dict | None, rho: pd.Series, verdict_: str):
-    ledger = Path("results.md"); txt = ledger.read_text()
+    ledger = LEDGER; txt = ledger.read_text()
     if "## Step 5: model families" not in txt:
         txt += HEADER
     if path.name in txt:
@@ -483,7 +484,7 @@ def run_family(d, name):
     print("  Spearman vs scored files:\n" + rho.round(3).to_string())
     v = verdict(rho, cv); print(f"  verdict: {v}")
     path = write_submission(d, pred, name); print(f"  wrote {path}")
-    json.dump({**cv, "spearman_vs_board": rho.round(4).to_dict()}, open(f"artifacts/family_{name}.json", "w"), indent=1)
+    json.dump({**cv, "spearman_vs_board": rho.round(4).to_dict()}, open(ARTIFACTS / f"family_{name}.json", "w"), indent=1)
     append_ledger(path, desc, len(cols), cv, rho, v)
 
 

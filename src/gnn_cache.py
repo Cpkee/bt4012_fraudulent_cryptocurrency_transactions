@@ -2,7 +2,7 @@
 PyTorch-only process (LightGBM and PyTorch each ship an OpenMP runtime and hang
 when used in the same process on macOS). probes.py reads the cache.
 
-    .venv/bin/python gnn_cache.py          # writes artifacts/gnn_cache/<key>.npz
+    .venv/bin/python src/gnn_cache.py          # writes artifacts/gnn_cache/<key>.npz
 Keys: f{lo}-{hi}_v{vlo}-{vhi}_s{seed} for CV folds; final_s{seed} for the fit on all
 labelled train rows applied to the test rows.
 """
@@ -11,9 +11,10 @@ import numpy as np, pandas as pd
 from pathlib import Path
 from gnn import GraphData, train_model, predict, _zscore
 from validation import FOLDS_WITH_HORIZON
+from paths import ARTIFACTS, DATA
 
 FAR = [(1, 7, 15, 21), (1, 14, 22, 28), (1, 21, 29, 35), (1, 10, 18, 24), (1, 17, 25, 31), (1, 7, 8, 21), (1, 14, 15, 28), (1, 21, 22, 35)]
-D = Path.home() / ".cache/bt4012/bt-4012-competition-2026"; OUT = Path("artifacts/gnn_cache")
+D = DATA; OUT = ARTIFACTS / "gnn_cache"
 EPOCHS, HIDDEN = 200, 64
 
 

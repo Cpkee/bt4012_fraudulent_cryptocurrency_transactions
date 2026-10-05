@@ -326,7 +326,7 @@ score-level correction.
 ![Architecture of the final model: inputs, feature cleaning, per-step normalisation, five-seed LightGBM, output; validation loop above, rejected branches below](figures/model_architecture.png)
 
 _Vector version for the PDF: `figures/model_architecture.svg`; regenerate with
-`.venv/bin/python figures/architecture.py`._ The same pipeline as Mermaid, for viewers that
+`.venv/bin/python docs/figures/architecture.py`._ The same pipeline as Mermaid, for viewers that
 render it (GitHub, VS Code):
 
 ```mermaid

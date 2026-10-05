@@ -3,5 +3,9 @@
   "python.terminal.activateEnvironment": true,
   "jupyter.kernels.excludePythonEnvironments": [
     "/usr/bin/python3"
-  ]
+  ],
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/src"
+  ],
+  "jupyter.notebookFileRoot": "${workspaceFolder}"
 }
