@@ -66,6 +66,12 @@ BOARD = {
     "fam_B15_Aoof_random.csv": 0.95849,
     "fam_B15_nb_mix50.csv": 0.95423,
     "fam_B15_nb_labels.csv": 0.94620,
+    "fam_recent21_Aoof_random.csv": 0.95413,
+    "fam_recent28_Aoof_random.csv": 0.95298,
+    "fam_B15_stack_logreg.csv": 0.95485,
+    "fam_B15_stack_knn.csv": 0.95589,
+    "fam_B15_pseudo_unlab.csv": 0.95278,
+    "fam_B15_nb_steprank.csv": 0.95560,
 }
 
 
@@ -115,7 +121,10 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               b_params: dict | None = None, b_estimators: int | None = None, a_all_history: bool = False, half_life: float | None = None,
               b_interact: int = 0, b_rank: bool = False, smooth: float | None = None,
               b_learner: str = "lgbm", b_topk: int = 0, b_monotone: bool = False,
-              a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0):
+              a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0,
+              oof_folds: int = 5, a_test_from_folds: bool = False,
+              a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
+              nb_steprank: bool = False, step_ctx: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -135,6 +144,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
     base = {**LGBM_PARAMS, **(params or {}), "n_estimators": n_estimators}
     d = _D(); edges = d.edges
     L_tx, T_tx = d.L["txId"].to_numpy(), d.test["txId"].to_numpy()
+    t_all = d.ts.to_numpy(); t_all_by_tx = pd.Series(t_all, index=L_tx)
     U = d.train[d.train.label.isna()].reset_index(drop=True); U_tx, U_ts = U["txId"].to_numpy(), U["time_step"].to_numpy()
 
     baseB = {**LGBM_PARAMS, **(b_params or params or {}), "n_estimators": b_estimators or n_estimators}
@@ -236,9 +246,14 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             # model that knows their period
             from sklearn.model_selection import StratifiedKFold
             idx_w = np.flatnonzero(win)
-            for tr_i, va_i in StratifiedKFold(5, shuffle=True, random_state=seed).split(idx_w, ytr[idx_w]):
-                a_i, b_i = idx_w[tr_i], idx_w[va_i]
-                pA[b_i] = model(seed).fit(Xtr.iloc[a_i], ytr[a_i]).predict_proba(Xtr.iloc[b_i])[:, 1]
+            fold_models = []
+            # optional: rows from the a_extra_hist steps just before the window are added to every
+            # fold scorer's training data (never scored themselves): stronger scorers, same targets
+            extra = np.flatnonzero((~win) & (t >= t.max() - (last_k - 1) - a_extra_hist)) if a_extra_hist else np.array([], dtype=int)
+            for tr_i, va_i in StratifiedKFold(oof_folds, shuffle=True, random_state=seed).split(idx_w, ytr[idx_w]):
+                a_i, b_i = np.r_[idx_w[tr_i], extra], idx_w[va_i]
+                m_f = model(seed).fit(Xtr.iloc[a_i], ytr[a_i]); fold_models.append(m_f)
+                pA[b_i] = m_f.predict_proba(Xtr.iloc[b_i])[:, 1]
         else:
             for s_ in np.unique(t[win]):
                 hist = t < s_
@@ -259,16 +274,65 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
         sc_tr = pd.Series(pA, index=tx_tr); sc_tr = sc_tr[sc_tr.notna()]
         if unlab and scored:
             sc_tr = pd.concat([sc_tr, pd.Series(scored)])
-        mA = model(seed).fit(Xtr, ytr) if a_all_history else model(seed).fit(Xtr[win], ytr[win], sample_weight=wts(win, t.max()))
-        pA_va = mA.predict_proba(Xva)[:, 1]
+        if a_test_from_folds and a_oof == "random":
+            # test / validation rows scored by the average of the OOF fold models, so they are
+            # scored by the same kind of model (trained on (k-1)/k of the window) as the training rows
+            pA_va = np.mean([m_f.predict_proba(Xva)[:, 1] for m_f in fold_models], axis=0)
+        else:
+            mA = model(seed).fit(Xtr, ytr) if a_all_history else model(seed).fit(Xtr[win], ytr[win], sample_weight=wts(win, t.max()))
+            pA_va = mA.predict_proba(Xva)[:, 1]
         tx_va = T_tx[Xva.index.to_numpy()] if _PHASE == "final" else L_tx[Xva.index.to_numpy()]
-        Ftr = neighbour_feats(tx_tr, sc_tr); Fva = neighbour_feats(tx_va, pd.Series(pA_va, index=tx_va))
+        # step 7 (plan_step7.md): model-A scores on a period-free scale before aggregation, and/or
+        # the period level handed to model B as its own column
+        T_ts = d.test["time_step"].to_numpy(); ts_va = T_ts[Xva.index.to_numpy()] if _PHASE == "final" else t_all[Xva.index.to_numpy()]
+        sc_va = pd.Series(pA_va, index=tx_va)
+        if nb_steprank:
+            sc_tr = pd.Series(pd.Series(sc_tr.to_numpy()).groupby(t_all_by_tx.reindex(sc_tr.index).to_numpy()).rank(pct=True).to_numpy(), index=sc_tr.index)
+            sc_va = pd.Series(pd.Series(pA_va).groupby(ts_va).rank(pct=True).to_numpy(), index=tx_va)
+        Ftr = neighbour_feats(tx_tr, sc_tr); Fva = neighbour_feats(tx_va, sc_va)
+        if step_ctx:
+            ctx_tr = pd.Series(pA).groupby(t).transform("mean").to_numpy()          # NaN outside the window (unscored rows)
+            ctx_va = pd.Series(pA_va).groupby(ts_va).transform("mean").to_numpy()
+            Ftr = Ftr.assign(step_ctx=ctx_tr); Fva = Fva.assign(step_ctx=ctx_va)
         Xtr_b, Xva_b = (interact(Xtr), interact(Xva)) if b_interact else (Xtr.reset_index(drop=True), Xva.reset_index(drop=True))
         if TOPK:
             Xtr_b, Xva_b = Xtr_b[TOPK], Xva_b[TOPK]
         A = pd.concat([Xtr_b, Ftr], axis=1)[win]
         B = pd.concat([Xva_b, Fva], axis=1)
-        mB = fit_B(A, ytr[win], t[win], wts(win, t.max()), seed)
+        yB, tB, wB = ytr[win], t[win], wts(win, t.max())
+        if b_stack_logreg:
+            # one extra column for model B: a logistic-regression score on the raw features,
+            # random OOF within the window for training rows, full-window fit for the rows to predict
+            from sklearn.linear_model import LogisticRegression
+            from sklearn.pipeline import make_pipeline
+            from sklearn.preprocessing import StandardScaler, FunctionTransformer
+            from sklearn.model_selection import StratifiedKFold as _SKF
+            def lr():
+                if b_stack_model == "mlp":
+                    from sklearn.neural_network import MLPClassifier
+                    head = MLPClassifier(hidden_layer_sizes=(128, 64), alpha=1e-3, max_iter=200, early_stopping=True, random_state=seed)
+                elif b_stack_model == "knn":
+                    from sklearn.neighbors import KNeighborsClassifier
+                    head = KNeighborsClassifier(n_neighbors=50, weights="distance", n_jobs=-1)
+                else:
+                    head = LogisticRegression(C=0.1, max_iter=2000)
+                return make_pipeline(StandardScaler(), FunctionTransformer(lambda z: np.clip(z, -10, 10)), head)
+            Xw = Xtr.iloc[np.flatnonzero(win)]; yw = ytr[win]; s_tr = np.zeros(len(Xw))
+            for f_i, g_i in _SKF(5, shuffle=True, random_state=seed).split(Xw, yw):
+                s_tr[g_i] = lr().fit(Xw.iloc[f_i], yw[f_i]).predict_proba(Xw.iloc[g_i])[:, 1]
+            A = A.assign(lr_score=s_tr); B = B.assign(lr_score=lr().fit(Xw, yw).predict_proba(Xva)[:, 1])
+        if b_pseudo_unlab:
+            # unlabelled rows of the window as extra model-B training rows, with hard pseudo-labels
+            # from the fold-average scorer (confident rows only); they are not used as neighbours
+            m_u = (U_ts >= t.max() - (last_k - 1)) & (U_ts <= t.max())
+            XU = U[Xtr.columns][m_u]; pu = np.mean([m_f.predict_proba(XU)[:, 1] for m_f in fold_models], axis=0)
+            keep_u = (pu > 0.9) | (pu < 0.02)
+            FU = neighbour_feats(U_tx[m_u][keep_u], sc_tr)      # neighbour numbers from the labelled scored rows
+            AU = pd.concat([XU[keep_u].reset_index(drop=True), FU], axis=1)
+            if b_stack_logreg: AU = AU.assign(lr_score=lr().fit(Xw, yw).predict_proba(XU[keep_u])[:, 1])
+            A = pd.concat([A, AU[A.columns]], ignore_index=True); yB = np.r_[yB, (pu[keep_u] > 0.5).astype(int)]
+            tB = np.r_[tB, U_ts[m_u][keep_u]]; wB = None if wB is None else np.r_[wB, np.ones(keep_u.sum())]
+        mB = fit_B(A, yB, tB, wB, seed)
         pB = mB.predict(B) if b_rank else mB.predict_proba(B.fillna(-1) if b_learner == "et" else B)[:, 1]
         if b_rank:
             pB = rankdata(pB) / len(pB)
@@ -399,6 +463,37 @@ FAMILIES = {
                   two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_bag=3), BAG5),
     "B15_nb_mix50": ("B15 two-stage with training-row neighbour features from a 50/50 mix of true labels and model-A scores, bagged x5", "clean",
                      two_stage(14, b_params=B15_PARAMS, b_estimators=300, nb_label_mix=0.5), BAG5),
+    # step 6 (docs/plans/plan_step6.md): one change each on B15_Aoof_random
+    "B15_Aoof10": ("B15 two-stage, training rows scored by 10-fold random OOF within the window, bagged x5", "clean",
+                   two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", oof_folds=10), BAG5),
+    "B7_Aoof_random": ("two-stage with random 5-fold OOF scoring and model B = 7 leaves, 600 rounds (depth re-check under the new protocol), bagged x5", "clean",
+                       two_stage(14, b_params={**B15_PARAMS, "num_leaves": 7}, b_estimators=600, a_oof="random"), BAG5),
+    "recent21_Aoof_random": ("B15 two-stage with random 5-fold OOF scoring on the 21-step window (15-35), bagged x5", "clean",
+                             two_stage(21, b_params=B15_PARAMS, b_estimators=300, a_oof="random"), BAG5),
+    "B15_Aoof_foldavg": ("B15 two-stage, random 5-fold OOF, test rows scored by the average of the 5 fold models (same scorer kind as training rows), bagged x5", "clean",
+                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", a_test_from_folds=True), BAG5),
+    "recent28_Aoof_random": ("B15 two-stage with random 5-fold OOF scoring on the 28-step window (8-35), bagged x5", "clean",
+                             two_stage(28, b_params=B15_PARAMS, b_estimators=300, a_oof="random"), BAG5),
+    "recent10_Aoof_random": ("B15 two-stage with random 5-fold OOF scoring on the 10-step window (26-35), bagged x5", "clean",
+                             two_stage(10, b_params=B15_PARAMS, b_estimators=300, a_oof="random"), BAG5),
+    # step 7: new mechanisms on B15_Aoof_random
+    "B15_Aoof_hist21": ("B15 two-stage, random OOF, fold scorers also trained on steps 15-21 (outside the window, never scored), bagged x5", "clean",
+                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", a_extra_hist=7), BAG5),
+    "B15_stack_logreg": ("B15 two-stage, random OOF, + a logistic-regression score as one extra model-B column, bagged x5", "clean",
+                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", b_stack_logreg=True), BAG5),
+    "B15_pseudo_unlab": ("B15 two-stage, random OOF, + confidently pseudo-labelled unlabelled window rows as extra model-B training rows, bagged x5", "clean",
+                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", b_pseudo_unlab=True), BAG5),
+    "B15_stack_mlp": ("B15 two-stage, random OOF, + an MLP score (128-64, early stopping) as one extra model-B column, bagged x5", "clean",
+                      two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", b_stack_logreg=True, b_stack_model="mlp"), BAG5),
+    "B15_stack_knn": ("B15 two-stage, random OOF, + a 50-NN distance-weighted score as one extra model-B column, bagged x5", "clean",
+                      two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", b_stack_logreg=True, b_stack_model="knn"), BAG5),
+    # step 7 (docs/plans/plan_step7.md): the input-scale axis
+    "B15_nb_steprank": ("B15 two-stage, random OOF, model-A scores replaced by their within-step percentile rank before neighbour aggregation, bagged x5", "clean",
+                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_steprank=True), BAG5),
+    "B15_step_ctx": ("B15 two-stage, random OOF, + one model-B column: mean model-A score of the row's time step, bagged x5", "clean",
+                     two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", step_ctx=True), BAG5),
+    "B15_nb_steprank_ctx": ("B15 two-stage, random OOF, within-step-ranked neighbour scores + the step-context column, bagged x5", "clean",
+                            two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_steprank=True, step_ctx=True), BAG5),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),

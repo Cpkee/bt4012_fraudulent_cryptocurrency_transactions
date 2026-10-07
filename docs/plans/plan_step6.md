@@ -49,3 +49,40 @@ a loss, between is a tie that keeps the simpler model.
 - `final_model.ipynb` and `final_model_kaggle.ipynb` switched to the random-OOF protocol
   (`CONFIG["oof"] = "random"`, 5 folds); each checks itself against `fam_B15_Aoof_random.csv`.
 - Ledger, `BOARD` and CLAUDE.md updated; the label curve recorded as a closed axis.
+
+## Status (2026-10-06)
+
+Implementation started: `two_stage()` gained `oof_folds` and `a_test_from_folds`; four families
+added in `src/families.py` and queued in this order: `B15_Aoof10`, `B15_Aoof_foldavg` (the
+reserve idea, promoted because it is the only new mechanism on this axis), `B7_Aoof_random`,
+`recent21_Aoof_random`. Gate results and upload order to be filled in from the build.
+
+Gate results (2026-10-06): `B15_Aoof10` 0.996 (unreadable), `B15_Aoof_foldavg` 1.000 (unreadable:
+the fold-average scorer and the full-window scorer give model B the same ranking), `B7_Aoof_random`
+0.985 vs the old 7-leaf file (unreadable), `recent21_Aoof_random` **0.970, upload candidate**
+(CV 3-fold 0.9818, horizon 0.890, best of the family). Scorer-similarity axis closed; the window
+under the new protocol is the open lever: `recent28_Aoof_random` and `recent10_Aoof_random` built
+to map it with 21 in one day.
+`recent28_Aoof_random` gated 0.933 and `recent10_Aoof_random` 0.935: both upload candidates. Upload order
+for 2026-10-07: 21, 28, 10 steps.
+
+## Read 2026-10-07 and decision
+
+21 steps 0.95413 (−0.004), 28 steps 0.95298 (−0.006): the 14-step window holds under random OOF.
+10 steps not uploaded: the window is decided whatever it would read. Window closed under both
+protocols; every setting-level axis on the pipeline is now closed.
+
+## Step 7: new mechanisms (built 2026-10-07, one change each on `B15_Aoof_random`)
+
+| name | change | why it might be readable and help |
+|---|---|---|
+| `B15_Aoof_hist21` | the fold scorers also train on steps 15–21 (outside the window, never scored) | the random-OOF gain came from stronger scorers for the window rows; more scorer data, same targets |
+| `B15_stack_logreg` | a logistic-regression score as one extra model-B column (random OOF in training) | a linear view the trees cannot form; stacking a different family |
+| `B15_pseudo_unlab` | confidently pseudo-labelled unlabelled window rows added to model B's training | more model-B rows from the right periods; pseudo-labels from the fold-average scorer |
+
+Reading rule unchanged (vs 0.95849: ≥ +0.002 gain, ≤ −0.002 loss).
+
+Gate results (2026-10-07): `B15_stack_logreg` 0.976 (upload today), `B15_Aoof_hist21` 0.994 (unreadable: scorer
+strength beyond the window does not change the ranking), `B15_pseudo_unlab` 0.915 (upload next).
+`B15_stack_knn` gated 0.950 and `B15_stack_mlp` gated 0.976 (built 2026-10-07). Upload order for 2026-10-08:
+`B15_pseudo_unlab`, then the two stacks (order set by today's logreg reading).
