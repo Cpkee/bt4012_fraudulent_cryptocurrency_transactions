@@ -124,7 +124,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0,
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
-              nb_steprank: bool = False, step_ctx: bool = False):
+              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -176,6 +176,21 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
         return pd.concat([X.reset_index(drop=True), pd.DataFrame(cols)], axis=1)
 
     TOPK = list(pd.read_csv(ARTIFACTS / "lgbm_importance_raw_1to28.csv", index_col=0).index[:b_topk]) if b_topk else None
+
+    # step 8 (docs/plans/plan_step8.md): neighbour *feature* aggregates for model B — the mean of
+    # the top `nb_feats` raw features (step-1 gain order) over labelled in- and out-neighbours,
+    # built exactly like the six score numbers (labelled-only neighbour set on both sides, blank
+    # where there is no neighbour). CV-rejected on the single-stage in step 1; never board-read.
+    IMP_ORDER = list(pd.read_csv(ARTIFACTS / "lgbm_importance_raw_1to28.csv", index_col=0).index) if nb_feats else []
+
+    def feat_agg(tx_rows: np.ndarray, sc_index: pd.Index, vals: pd.DataFrame) -> pd.DataFrame:
+        """Mean of `vals` (indexed by txId) over predecessors and successors of tx_rows, edges
+        restricted to nodes in `sc_index`."""
+        e = edges[edges.txId1.isin(sc_index) & edges.txId2.isin(sc_index)]
+        pred = vals.reindex(e.txId1).set_axis(e.txId2.to_numpy()).groupby(level=0).mean()
+        succ = vals.reindex(e.txId2).set_axis(e.txId1.to_numpy()).groupby(level=0).mean()
+        out = pd.concat([pred.reindex(tx_rows).add_prefix("nbf_in_"), succ.reindex(tx_rows).add_prefix("nbf_out_")], axis=1)
+        return out.reset_index(drop=True)
 
     def fit_B(A_df, y_win, t_win, w, seed):
         """Model B as a classifier (LightGBM or XGBoost), or as a lambdarank ranker."""
@@ -290,6 +305,13 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             sc_tr = pd.Series(pd.Series(sc_tr.to_numpy()).groupby(t_all_by_tx.reindex(sc_tr.index).to_numpy()).rank(pct=True).to_numpy(), index=sc_tr.index)
             sc_va = pd.Series(pd.Series(pA_va).groupby(ts_va).rank(pct=True).to_numpy(), index=tx_va)
         Ftr = neighbour_feats(tx_tr, sc_tr); Fva = neighbour_feats(tx_va, sc_va)
+        if nb_feats:
+            nbf = [c for c in IMP_ORDER if c in Xtr.columns][:nb_feats]
+            vals_tr = pd.DataFrame(Xtr[nbf].to_numpy(), index=tx_tr, columns=nbf)
+            vals_tr = vals_tr[vals_tr.index.isin(sc_tr.index)]            # labelled scored window rows only
+            vals_va = pd.DataFrame(Xva[nbf].to_numpy(), index=tx_va, columns=nbf)
+            Ftr = pd.concat([Ftr, feat_agg(tx_tr, sc_tr.index, vals_tr)], axis=1)
+            Fva = pd.concat([Fva, feat_agg(tx_va, sc_va.index, vals_va)], axis=1)
         if step_ctx:
             ctx_tr = pd.Series(pA).groupby(t).transform("mean").to_numpy()          # NaN outside the window (unscored rows)
             ctx_va = pd.Series(pA_va).groupby(ts_va).transform("mean").to_numpy()
@@ -494,6 +516,9 @@ FAMILIES = {
                      two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", step_ctx=True), BAG5),
     "B15_nb_steprank_ctx": ("B15 two-stage, random OOF, within-step-ranked neighbour scores + the step-context column, bagged x5", "clean",
                             two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_steprank=True, step_ctx=True), BAG5),
+    # step 8 (docs/plans/plan_step8.md): neighbour feature aggregates inside the two-stage
+    "B15_nbfeat": ("B15 two-stage, random OOF, + means of the top-10 raw features over labelled in- and out-neighbours (20 extra model-B columns), bagged x5", "clean",
+                   two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10), BAG5),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),

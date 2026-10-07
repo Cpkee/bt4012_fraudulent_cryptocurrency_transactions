@@ -160,9 +160,28 @@ Read 2026-10-04: model B's learner closed (XGBoost −0.002, CatBoost −0.010, 
 Read 2026-10-05: **random 5-fold OOF scoring of training rows = +0.0023, new best**; label
 information in training neighbour numbers hurts monotonically (closed). The new axis: make the
 training-row scorer and the test-row scorer as alike as possible. Plan with candidates, reading
-rules and follow-ups: **`docs/plans/plan_step6.md`** (10-fold OOF; model B at 7 leaves and the 21-step window
-re-checked under the new protocol; in reserve, test rows scored by the average of the OOF fold
-models). Keep the ledger and this file current after every reading; re-execute both
+rules and follow-ups: **`docs/plans/plan_step6.md`**. Gate results 2026-10-06: 10-fold OOF ranks
+0.996 like the best and the fold-average test scorer 1.000 (the scorer-similarity axis is
+exhausted); 7 leaves under random OOF ranks 0.985 like the old 7-leaf file (unreadable); the
+**21-step window under random OOF passes (0.970)** and has the best CV of the family. The window
+is the one open readable lever under the new protocol: 10 / 21 / 28 steps are built and gated
+(0.935 / 0.970 / 0.933 vs the best). Read 2026-10-07: 21 steps 0.95413 (−0.004), 28 steps 0.95298
+(−0.006): **the 14-step window holds under random OOF**; 10 steps not uploaded (no decision value).
+The window is closed under both protocols. Step 7 (new mechanisms, `docs/plans/plan_step6.md`):
+fold scorers with 7 extra steps of history rank 0.994 like the best (scorer-strength axis closed);
+`B15_stack_logreg` (logistic-regression score as an extra model-B column) read **0.95485, −0.004**:
+a linear stacked score hurts; `B15_pseudo_unlab` (pseudo-labelled unlabelled window rows as extra
+model-B training rows) gated 0.915, next upload.** Read 2026-10-07: `B15_stack_knn` 0.95589 (−0.003) and `B15_pseudo_unlab` 0.95278 (−0.006): stacking
+and extra training rows closed; the MLP stack is held. **Next plan: `docs/plans/plan_step7.md`**
+(input-scale axis). Built 2026-10-07: `B15_nb_steprank` (within-step rank of model-A scores before
+aggregation) gated 0.964, uploaded as the day's third slot; `B15_step_ctx` (per-step mean score as a
+model-B column) ranks 0.988 like the best, unreadable: model B ignores a per-period level.
+Read 2026-10-08: `B15_nb_steprank` 0.95560 (−0.003): input-scale axis closed. **Next plan:
+`docs/plans/plan_step8.md`** (bridged neighbours through unlabelled nodes; transductive
+self-training of model B on the test rows; private-board finals track; exit condition). Diagnostics 2026-10-07 argued against both step-8 candidates as written (recorded in the plan);
+built instead with approval: **`B15_nbfeat`** (means of the top-10 raw features over labelled in/out
+neighbours as 20 extra model-B columns, `two_stage(nb_feats=10)`), gated 0.973 vs the best, CV 3-fold
+0.9689: first upload of 2026-10-08. Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules
 in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `docs/` (see file map).
