@@ -229,6 +229,10 @@ in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `d
   automatic; `_PHASE` tells two-stage whether `Xva` holds validation or test rows.
 - Two-stage model-A predictions must be out-of-fold in time for training rows or the trees
   over-trust them; test neighbours are the labelled test rows only.
+- **Column order is part of the model.** LightGBM samples 60% of columns per tree by position, so the
+  neighbour-feature block must be added in the same order everywhere (the step-1 gain order from
+  `artifacts/lgbm_importance_raw_1to28.csv`); the notebooks carry that order as an explicit list in
+  `CONFIG`. A file-order version of the same model differed by up to 0.066 in probability (2026-10-08).
 - GNN outputs must be precomputed in a PyTorch-only process (`gnn_cache.py`): LightGBM and
   PyTorch hang together in one process on macOS.
 - A two-stage build takes ~30 min (model A once per training step, × folds × seeds); queue builds
