@@ -78,3 +78,12 @@ family's best CV): unreadable, not uploaded. Feeding the feature means to model 
 scores too little to move the final ranking; model B already extracts what those columns carry.
 The entry point is closed. Candidate 3 (`B15_nbfeat_hop2`, two-hop feature means) is being built
 and gated as the plan says; the third slot of 2026-10-08 is held unless it passes.
+
+Candidate 3 `B15_nbfeat_hop2` ranks **0.988** like the reference (CV 3-fold 0.9692): unreadable, not
+uploaded. **Exit condition reached.** The neighbour-feature axis is closed on amount (top-10 ≈ all
+159), statistic (max, delta), entry point (model A) and reach (two hops). Six files built on
+2026-10-08, two read (one gain, one tie), four unreadable. Third slot of the day held.
+
+Standing from here: finals = `fam_B15_nbfeat_all` + `fam_B15_Aoof_random` (alternative Final 2
+`fam_B15_nbfeat`); `final_model*.ipynb` reproduce the reference; report work resumes; at most one
+slot a day on an idea that changes the information set and passes the gate.
