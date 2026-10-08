@@ -70,3 +70,11 @@ feature means also enter model A) and goes into the notebook only if adopted.
 If candidates 1 and 3 both fail to read a gain, the neighbour axis is closed on both the amount
 and the entry point. Remaining effort then goes to the finals and the report, with one slot a day
 kept for an idea that changes the information set and passes the gate.
+
+## Status (2026-10-08, evening)
+
+Candidate 1 `B15_nbfeat_A` ranks **0.991** like the reference (CV 3-fold 0.9708, horizon 0.8288, the
+family's best CV): unreadable, not uploaded. Feeding the feature means to model A changes its
+scores too little to move the final ranking; model B already extracts what those columns carry.
+The entry point is closed. Candidate 3 (`B15_nbfeat_hop2`, two-hop feature means) is being built
+and gated as the plan says; the third slot of 2026-10-08 is held unless it passes.

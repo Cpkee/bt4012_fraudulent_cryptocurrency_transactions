@@ -126,7 +126,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0,
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
-              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False):
+              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -328,6 +328,16 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             vals_va = pd.DataFrame(Xva[nbf].to_numpy(), index=tx_va, columns=nbf)
             Ftr = pd.concat([Ftr, feat_agg(tx_tr, sc_tr.index, vals_tr)], axis=1)
             Fva = pd.concat([Fva, feat_agg(tx_va, sc_va.index, vals_va)], axis=1)
+            if nb_feat_hop2:
+                # two-hop feature means: for every scored node its in-/out-neighbour feature means,
+                # then averaged again over the row's in-/out-neighbours (features of neighbours' neighbours)
+                for F_, vals_, tx_, sc_ in ((Ftr, vals_tr, tx_tr, sc_tr), (Fva, vals_va, tx_va, sc_va)):
+                    full = feat_agg(vals_.index.to_numpy(), sc_.index, vals_).set_index(vals_.index)
+                    for side in ("in", "out"):
+                        cols = [f"nbf_{side}_mean_{c}" for c in nbf]
+                        h = feat_agg(tx_, sc_.index, full[cols])          # mean over neighbours of their own side-means
+                        for c in nbf:
+                            F_[f"nbf_h2_{side}_{c}"] = h[f"nbf_{side}_mean_nbf_{side}_mean_{c}"].to_numpy()
             if nb_feat_delta:
                 # the row's own value minus its neighbours' mean: a difference trees cannot form from
                 # two columns with a few splits (blank where there is no neighbour)
@@ -555,6 +565,9 @@ FAMILIES = {
     # step 9 (docs/plans/plan_step9.md): read 2026-10-08 nbfeat_all 0.96177 (+0.0011, tie) -> the neighbour feature means also feed model A
     "B15_nbfeat_A": ("B15 two-stage, random OOF, top-10 neighbour feature means fed to model A as well as model B, bagged x5", "clean",
                      two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feats_into_A=True), BAG5),
+    # gated 2026-10-08: nbfeat_A 0.991 (unreadable) -> candidate 3: features of the neighbours' neighbours
+    "B15_nbfeat_hop2": ("B15 two-stage, random OOF, top-10 neighbour feature means + two-hop feature means (20 more model-B columns), bagged x5", "clean",
+                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_hop2=True), BAG5),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),

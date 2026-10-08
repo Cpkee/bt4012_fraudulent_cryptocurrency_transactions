@@ -199,7 +199,8 @@ best: unreadable, the amount of neighbour feature information is saturated at th
 changing the kind of information: `B15_nbfeat_delta` (row minus neighbour mean) and `B15_nbfeat_all`
 (means of all 159 features), gated 2026-10-08: delta 0.992 (unreadable), **nbfeat_all 0.979 passed and read 0.96177 (+0.0011, tie band;
 highest public score)**: the amount of neighbour feature information is closed. **Next plan: `docs/plans/plan_step9.md`**
-(neighbour feature means into model A as well; `B15_nbfeat_A` building 2026-10-08). Both `final_model*.ipynb` re-executed 2026-10-08: they reproduce
+(neighbour feature means into model A as well: `B15_nbfeat_A` ranks 0.991, unreadable, entry point closed;
+`B15_nbfeat_hop2` built and gated next). Both `final_model*.ipynb` re-executed 2026-10-08: they reproduce
 `fam_B15_nbfeat.csv` exactly (1.1e-16). Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules
