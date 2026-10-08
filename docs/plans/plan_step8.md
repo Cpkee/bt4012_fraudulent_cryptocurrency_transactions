@@ -116,3 +116,15 @@ board-read.
 CV is below the best (0.9728 / 0.8420), as it was for every neighbour-information change that
 later won on the board; it is a sanity pass, not a veto. Reading rule vs 0.95849: ≥ +0.002 gain,
 ≤ −0.002 loss. Queue behind it: `B15_bridge` only if built and gated; the third slot held.
+
+## Reading (2026-10-08)
+
+**`fam_B15_nbfeat` = 0.96069, +0.0022 vs 0.95849: gain, new best** (7th on the board). Neighbour
+*feature* information, which CV rejected on the single-stage in step 1, helps model B once it
+already sees neighbour scores. The neighbour-information axis is open again. Follow-ups, one
+change each on `B15_nbfeat`, built and gated in this order:
+- `B15_nbfeat20`: top-20 features instead of top-10 (does more feature information help?);
+- `B15_nbfeat_max`: mean and max of the top-10 (does a second statistic help?).
+Reading rule vs 0.96069: ≥ +0.002 gain, ≤ −0.002 loss. Finals standing choice: `fam_B15_nbfeat`
+plus `fam_B15_Aoof_random` (ranks 0.973 like it, 0.95849). Both `final_model*.ipynb` must be
+re-executed with the nbfeat columns (pipeline change, not a CONFIG change).

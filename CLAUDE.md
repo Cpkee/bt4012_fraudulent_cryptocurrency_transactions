@@ -15,9 +15,10 @@ slots is a day of lost information: there should always be readable candidates b
    about this data. Say "predicted fraud drops at step 43", not "the dark-market shutdown".
 2. **One session at a time.** Several sessions have collided on this repo. Check `git status` and
    file mtimes before writing; never `cat >` a module that exists; extend, do not replace.
-3. **Current best / reference for new probes = `fam_B15_Aoof_random.csv`** (public 0.95849,
-   2026-10-05: two-stage, model B = 15 leaves, training rows scored by random 5-fold OOF within
-   the window; before it time-ordered OOF 0.95621, 7 leaves 0.95504, plain two-stage 0.95260).
+3. **Current best / reference for new probes = `fam_B15_nbfeat.csv`** (public 0.96069,
+   2026-10-08: the 0.95849 two-stage plus the means of the top-10 raw features over labelled
+   in- and out-neighbours as 20 extra model-B columns; before it random-OOF scoring 0.95849,
+   time-ordered OOF 0.95621, 7 leaves 0.95504, plain two-stage 0.95260).
    The base recipe underneath it is `sub_06` (LightGBM, 31 leaves, 300 rounds, lr 0.03, 80% rows /
    60% columns, unweighted, 5-seed bag, 159 cleaned features; `families.py ref` reproduces it).
 4. **Upload gate = distinctness, not CV.** A file is uploaded only if its Spearman rank
@@ -53,7 +54,7 @@ slots is a day of lost information: there should always be readable candidates b
 - Six columns (`feat_100, 101, 103, 136, 137, 139`) identify the time period (near-linear in step,
   99% of test values out of training range). Removed everywhere.
 
-## The current model (0.95849), in order
+## The current model (0.96069), in order
 
 1. 159 cleaned features, untouched (no scaling, no engineered columns).
 2. Training rows = labelled rows of the last 14 steps (22–35), ~11,700 rows.
@@ -64,9 +65,12 @@ slots is a day of lost information: there should always be readable candidates b
 4. **Six neighbour numbers** per transaction from the edge list: mean, max and count of model-A
    scores over the transactions that paid into it, and separately over those it paid out to.
    Only labelled rows count as neighbours on both sides (parity with the labelled-only test file).
-5. **Model B** (LightGBM, 15 leaves, 300 rounds, lr 0.05, no row subsampling) on 159 features +
-   6 neighbour numbers → final probability.
-6. Average of 5 seeds. Everything lives in `families.py` (`two_stage`) and `final_model.ipynb`.
+5. **Twenty neighbour feature means** (2026-10-08, +0.0022): the mean of each of the top-10 raw
+   features by step-1 gain (`feat_53, 55, 47, 90, 5, 2, 163, 132, 41, 14`) over the same labelled
+   in-neighbours and, separately, out-neighbours (`two_stage(nb_feats=10)`).
+6. **Model B** (LightGBM, 15 leaves, 300 rounds, lr 0.05, no row subsampling) on 159 features +
+   6 neighbour numbers + 20 neighbour feature means → final probability.
+7. Average of 5 seeds. Everything lives in `families.py` (`two_stage`) and `final_model.ipynb`.
 
 ## Feature engineering and modelling: what was tried and what it did
 
@@ -75,7 +79,8 @@ slots is a day of lost information: there should always be readable candidates b
 | Remove 6 period identifiers (adversarial validation) | neutral | +0.002 when kept, inside noise; kept+time_step ranks 0.995 like sub_06 (unreadable) | kept removed |
 | Within-step percentile rank of 9 drifting features (`drift.StepNormalizer`) | +0.02 horizon | −0.002 vs sub_06; on recent14 ranks 0.981 (unreadable) | not used |
 | Graph topology features (degree, unlabelled-neighbour counts, DAG depth, PageRank) | no gain; rewired edges same | ranks 0.994 like reference (unreadable) | rejected |
-| Neighbour *feature* aggregates (mean/max/std, 1- and 2-hop, deltas) | −0.008 | – | rejected |
+| Neighbour *feature* aggregates (mean/max/std, 1- and 2-hop, deltas) on the single-stage | −0.008 | – | rejected (step 1) |
+| **Neighbour feature means inside the two-stage** (top-10 raw features over labelled in/out neighbours, 20 model-B columns) | −0.004 3-fold, −0.02 horizon | **+0.0022 → 0.96069** | **adopted; best** (2026-10-08) |
 | Local block only (drop aggregated columns 94–165) | −0.023 | **−0.012 vs recent14** (2026-10-01) | rejected; board and CV agree |
 | Period identifiers back as step-median deviations | −0.004 | – | rejected |
 | Recency: hard window / soft weights | monotone loss | **window 14 = +0.005; half-life 5 = +0.007 vs all history** | **CV wrong; adopted** |
@@ -115,15 +120,16 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_B15_interact / smooth / lambdarank | interaction features / edge smoothing / ranking objective | 0.9562 / 0.9446 / 0.9450 |
 | fam_B15_xgb / cat / et | model B = XGBoost / CatBoost / ExtraTrees | 0.9540 / 0.9464 / 0.9178 |
 | fam_B15_nb_labels / nb_mix50 | training neighbour numbers from labels / half labels | 0.9462 / 0.9542 |
-| **fam_B15_Aoof_random** | training rows scored by random 5-fold OOF within the window | **0.9585** |
+| fam_B15_Aoof_random | training rows scored by random 5-fold OOF within the window | 0.9585 |
+| **fam_B15_nbfeat** | + means of the top-10 raw features over labelled in/out neighbours (20 model-B columns) | **0.9607** |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
 Label curve for training neighbour numbers: 0% labels 0.9562, 50% 0.9542, 100% 0.9462 (closed).
-**Current best = fam_B15_Aoof_random** (`final_model.ipynb` and `final_model_kaggle.ipynb` reproduce it). The brief gives
+**Current best = fam_B15_nbfeat** (0.96069, 2026-10-08, 7th on the board; `final_model*.ipynb` updated, re-execution pending). The brief gives
 the lowest-ranked participant 0 points. Finals must be selected by hand on Kaggle (two files;
 the better private score counts). Standing choice, revised whenever the best changes: the best
-file plus the strongest file that ranks < 0.97 like it (currently `fam_recent14_2stage_tunedB`).
+file plus the strongest file that ranks < 0.98 like it (currently `fam_B15_Aoof_random`, 0.973).
 
 ## What we learned (the through-line for the report)
 
@@ -143,7 +149,7 @@ file plus the strongest file that ranks < 0.97 like it (currently `fam_recent14_
 
 Closed axes (each read to its peak on the board; do not re-spend slots on them): training window
 (14), base weighting (flat), model A (window / history / depth all leave the ranking unchanged),
-neighbour statistics (saturated at the six numbers), model B depth (peak at 15 leaves), feature
+neighbour *score* statistics (saturated at the six numbers; neighbour *feature* means are the open axis since 2026-10-08), model B depth (peak at 15 leaves), feature
 block (all 159), normalisation (unreadable), graph topology and GNNs, score-level corrections,
 other model families.
 
@@ -181,7 +187,10 @@ Read 2026-10-08: `B15_nb_steprank` 0.95560 (−0.003): input-scale axis closed. 
 self-training of model B on the test rows; private-board finals track; exit condition). Diagnostics 2026-10-07 argued against both step-8 candidates as written (recorded in the plan);
 built instead with approval: **`B15_nbfeat`** (means of the top-10 raw features over labelled in/out
 neighbours as 20 extra model-B columns, `two_stage(nb_feats=10)`), gated 0.973 vs the best, CV 3-fold
-0.9689: first upload of 2026-10-08. Keep the ledger and this file current after every reading; re-execute both
+0.9689. **Read 2026-10-08: 0.96069, +0.0022, new best.** Neighbour *feature* information helps model B
+once it sees neighbour scores (CV rejected it on the single-stage in step 1: CV is a guide for features
+only when the feature enters the same model). Axis reopened; strength being mapped one change at a time:
+`B15_nbfeat20` (top-20) and `B15_nbfeat_max` (mean + max of the top-10) built and gated 2026-10-08. Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules
 in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `docs/` (see file map).

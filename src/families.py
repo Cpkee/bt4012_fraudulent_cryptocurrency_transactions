@@ -72,6 +72,7 @@ BOARD = {
     "fam_B15_stack_knn.csv": 0.95589,
     "fam_B15_pseudo_unlab.csv": 0.95278,
     "fam_B15_nb_steprank.csv": 0.95560,
+    "fam_B15_nbfeat.csv": 0.96069,
 }
 
 
@@ -124,7 +125,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0,
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
-              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0):
+              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",)):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -187,10 +188,12 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
         """Mean of `vals` (indexed by txId) over predecessors and successors of tx_rows, edges
         restricted to nodes in `sc_index`."""
         e = edges[edges.txId1.isin(sc_index) & edges.txId2.isin(sc_index)]
-        pred = vals.reindex(e.txId1).set_axis(e.txId2.to_numpy()).groupby(level=0).mean()
-        succ = vals.reindex(e.txId2).set_axis(e.txId1.to_numpy()).groupby(level=0).mean()
-        out = pd.concat([pred.reindex(tx_rows).add_prefix("nbf_in_"), succ.reindex(tx_rows).add_prefix("nbf_out_")], axis=1)
-        return out.reset_index(drop=True)
+        parts = []
+        for side, src, dst in (("in", e.txId1, e.txId2), ("out", e.txId2, e.txId1)):
+            g = vals.reindex(src).set_axis(dst.to_numpy()).groupby(level=0)
+            for stat in nb_feat_stats:                      # "mean" (default), optionally "max" / "min" / "std"
+                parts.append(g.agg(stat).reindex(tx_rows).add_prefix(f"nbf_{side}_{stat}_"))
+        return pd.concat(parts, axis=1).reset_index(drop=True)
 
     def fit_B(A_df, y_win, t_win, w, seed):
         """Model B as a classifier (LightGBM or XGBoost), or as a lambdarank ranker."""
@@ -519,6 +522,11 @@ FAMILIES = {
     # step 8 (docs/plans/plan_step8.md): neighbour feature aggregates inside the two-stage
     "B15_nbfeat": ("B15 two-stage, random OOF, + means of the top-10 raw features over labelled in- and out-neighbours (20 extra model-B columns), bagged x5", "clean",
                    two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10), BAG5),
+    # read 2026-10-08: B15_nbfeat 0.96069 (+0.0022, new best) -> map the strength of the axis, one change each
+    "B15_nbfeat20": ("B15 two-stage, random OOF, + means of the top-20 raw features over labelled in- and out-neighbours (40 extra model-B columns), bagged x5", "clean",
+                     two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=20), BAG5),
+    "B15_nbfeat_max": ("B15 two-stage, random OOF, + mean and max of the top-10 raw features over labelled in- and out-neighbours (40 extra model-B columns), bagged x5", "clean",
+                       two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_stats=("mean", "max")), BAG5),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),
