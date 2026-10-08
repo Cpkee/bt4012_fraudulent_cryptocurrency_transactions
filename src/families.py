@@ -74,6 +74,7 @@ BOARD = {
     "fam_B15_nb_steprank.csv": 0.95560,
     "fam_B15_nbfeat.csv": 0.96069,
     "fam_B15_nbfeat_all.csv": 0.96177,
+    "fam_B15_nbfeat_all_seedsB.csv": 0.96323,
 }
 
 

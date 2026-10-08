@@ -27,8 +27,9 @@ slots is a day of lost information: there should always be readable candidates b
    most large model decisions but right on the one large feature decision (see "What we learned").
 5. **One change per upload**, 3 uploads/day. Reading rule vs the file it changes: > +0.005 signal,
    within ±0.005 tie (simpler model wins), < −0.005 rejected. Noise: a 5-seed bag re-seeded moves
-   the public score by ≈ 0.001 (measured 2026-10-02); differences between *different* models of
-   0.002–0.003 are therefore more meaningful than the ±0.005 band assumed earlier.
+   the public score by ≈ 0.001 on the plain two-stage (2026-10-02) and by **0.0015 on the current
+   model** (2026-10-08: seeds 0–4 0.96177, seeds 5–9 0.96323); a single-file difference below ≈ 0.003 is
+   therefore not a reading, and the finals file is a 10-seed bag.
 6. **Ledger**: every file goes in `docs/results.md` before upload with CV numbers and the nearest scored
    file; the public score is filled in after. `BOARD` in `families.py` mirrors scored files.
 7. Never use `time_step` as a model input; it is for splitting, windows, weights and per-step
@@ -122,18 +123,20 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_B15_nb_labels / nb_mix50 | training neighbour numbers from labels / half labels | 0.9462 / 0.9542 |
 | fam_B15_Aoof_random | training rows scored by random 5-fold OOF within the window | 0.9585 |
 | **fam_B15_nbfeat** | + means of the top-10 raw features over labelled in/out neighbours (20 model-B columns) | **0.9607** |
-| fam_B15_nbfeat_all | means of all 159 features over labelled in/out neighbours (318 columns) | 0.9618 (tie band, +0.0011; highest public score) |
+| fam_B15_nbfeat_all | means of all 159 features over labelled in/out neighbours (318 columns) | 0.9618 (tie band, +0.0011) |
+| fam_B15_nbfeat_all_seedsB | the same model, seeds 5–9 (noise reading) | **0.9632** (+0.0015 = seed noise; highest public score) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
 Label curve for training neighbour numbers: 0% labels 0.9562, 50% 0.9542, 100% 0.9462 (closed).
 **Reference = fam_B15_nbfeat** (0.96069; `final_model.ipynb` and `final_model_kaggle.ipynb` reproduce it exactly);
-**highest public score = fam_B15_nbfeat_all** (0.96177, 2026-10-08, 6th on the board; a tie by the reading
-rule, so the simpler file stays the reference and the all-159 file leads the finals). The brief gives
+**highest public score = fam_B15_nbfeat_all_seedsB** (0.96323, 2026-10-08: the all-159 model re-seeded; the
+0.96069 → 0.96177 → 0.96323 steps are all inside seed noise). **Final 1 = `fam_B15_nbfeat_all_bag10`** (the
+10-seed bag = probability average of the two scored 5-seed files; must be uploaded to be selectable). The brief gives
 the lowest-ranked participant 0 points. Finals must be selected by hand on Kaggle (two files;
-the better private score counts). Standing choice, revised whenever the best changes: the highest
-public file plus the strongest file that ranks < 0.97 like it (currently `fam_B15_nbfeat_all` + `fam_B15_Aoof_random`,
-0.960; `fam_B15_nbfeat` ranks 0.979 like the leader and is the alternative Final 2).
+the better private score counts). Standing choice, revised whenever the best changes: the 10-seed bag of the
+highest-scoring model plus the strongest file that ranks < 0.97 like it (currently `fam_B15_nbfeat_all_bag10` +
+`fam_B15_Aoof_random`, 0.964).
 
 ## What we learned (the through-line for the report)
 
@@ -205,8 +208,11 @@ is closed on amount, statistic, entry point and reach.** Finals = `fam_B15_nbfea
 a day for an idea that changes the information set and passes the gate; report work resumes.
 Round 2 (user-approved 2026-10-08, `plan_step9.md`): seed replicate of the leader uploaded as a noise reading;
 per-step balanced weights 0.986 (unreadable); **`B23_nbfeat` passes the gate (0.972)**; OOF GraphSAGE embeddings as
-model-B columns (`gnn_cache_window.py`, `two_stage(b_gnn_embed=True)`) **passes the gate at 0.932** (CV 3-fold 0.9611). Queue 2026-10-09: slot 1
-`fam_B15_nbfeat_gnn`, slot 2 `fam_B23_nbfeat`, slot 3 held. Both `final_model*.ipynb` re-executed 2026-10-08: they reproduce
+model-B columns (`gnn_cache_window.py`, `two_stage(b_gnn_embed=True)`) **passes the gate at 0.932** (CV 3-fold 0.9611). **Seed replicate read 0.96323**: seed noise
+0.0015 on this model. Queue 2026-10-09: slot 1 `fam_B15_nbfeat_gnn` (0.932, large enough to read), slot 2 the finals
+file `fam_B15_nbfeat_all_bag10` (unreadable by construction, uploaded so it can be selected), slot 3 held;
+`B23_nbfeat` (0.972) is deferred: a depth re-check's delta would sit inside seed noise. Direction: variance
+reduction and hedged finals, not more ±0.002 readings; `final_model*.ipynb` now target the 10-seed all-159 bag. Both `final_model*.ipynb` re-executed 2026-10-08: they reproduce
 `fam_B15_nbfeat.csv` exactly (1.1e-16). Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules

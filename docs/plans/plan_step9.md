@@ -128,3 +128,22 @@ CV. Final queue for 2026-10-09: slot 1 `fam_B15_nbfeat_gnn`, slot 2 `fam_B23_nbf
 Readings vs 0.96069: ≥ +0.002 gain, ≤ −0.002 loss. If the GNN file gains, the follow-up is the same
 embeddings on the all-159 base; if it loses, the embedding recipe is closed on the board as the
 in-sample version was on CV.
+
+## Reading (2026-10-08, third slot): the seed replicate = 0.96323
+
+`fam_B15_nbfeat_all_seedsB` (same model, seeds 5–9) scored **0.96323 vs 0.96177** for seeds 0–4:
++0.0015 from the random seed alone, the highest public score so far, and more than the 0.001 noise
+measured on the plain two-stage. What it tells us:
+- The last three "steps" (0.96069 → 0.96177 → 0.96323, span 0.0025) are inside seed noise. The board
+  cannot distinguish the top-10 and all-159 neighbour-feature variants; both are the same architecture.
+- A single-file difference below ≈ 0.003 is not a reading. The ±0.002 band under-states the noise of
+  this model; small-delta candidates (`B23_nbfeat`, 0.972) are deferred, large-change candidates
+  (`B15_nbfeat_gnn`, 0.932) remain readable.
+- The lever this exposes is variance, not capacity: average more seeds. The 10-seed bag of the
+  all-159 model is exactly the probability average of the two scored files
+  (`fam_B15_nbfeat_all_bag10.csv`, built 2026-10-08, ranks 0.998 like both); it is the finals file and
+  must be uploaded to be selectable. Expected public score between 0.9618 and 0.9632 or slightly above.
+
+Revised queue for 2026-10-09: slot 1 `fam_B15_nbfeat_gnn`; slot 2 `fam_B15_nbfeat_all_bag10`; slot 3
+held. Finals: `fam_B15_nbfeat_all_bag10` + `fam_B15_Aoof_random` (0.964). `final_model*.ipynb` now target
+the 10-seed all-159 bag (CONFIG: `nb_features="all"`, `seeds` 0–9); re-execution in progress.
