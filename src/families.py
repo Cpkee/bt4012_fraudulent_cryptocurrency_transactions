@@ -125,7 +125,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0,
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
-              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",)):
+              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -315,6 +315,13 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             vals_va = pd.DataFrame(Xva[nbf].to_numpy(), index=tx_va, columns=nbf)
             Ftr = pd.concat([Ftr, feat_agg(tx_tr, sc_tr.index, vals_tr)], axis=1)
             Fva = pd.concat([Fva, feat_agg(tx_va, sc_va.index, vals_va)], axis=1)
+            if nb_feat_delta:
+                # the row's own value minus its neighbours' mean: a difference trees cannot form from
+                # two columns with a few splits (blank where there is no neighbour)
+                for side in ("in", "out"):
+                    for c in nbf:
+                        Ftr[f"nbf_{side}_delta_{c}"] = Xtr[c].to_numpy() - Ftr[f"nbf_{side}_mean_{c}"].to_numpy()
+                        Fva[f"nbf_{side}_delta_{c}"] = Xva[c].to_numpy() - Fva[f"nbf_{side}_mean_{c}"].to_numpy()
         if step_ctx:
             ctx_tr = pd.Series(pA).groupby(t).transform("mean").to_numpy()          # NaN outside the window (unscored rows)
             ctx_va = pd.Series(pA_va).groupby(ts_va).transform("mean").to_numpy()
@@ -527,6 +534,11 @@ FAMILIES = {
                      two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=20), BAG5),
     "B15_nbfeat_max": ("B15 two-stage, random OOF, + mean and max of the top-10 raw features over labelled in- and out-neighbours (40 extra model-B columns), bagged x5", "clean",
                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_stats=("mean", "max")), BAG5),
+    # gated 2026-10-08: nbfeat20 0.989 and nbfeat_max 0.994 like B15_nbfeat (unreadable) -> change the kind of information, not the amount
+    "B15_nbfeat_delta": ("B15 two-stage, random OOF, + top-10 neighbour feature means and the row's own value minus each mean (40 extra model-B columns), bagged x5", "clean",
+                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_delta=True), BAG5),
+    "B15_nbfeat_all": ("B15 two-stage, random OOF, + means of all 159 raw features over labelled in- and out-neighbours (318 extra model-B columns), bagged x5", "clean",
+                       two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), BAG5),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),

@@ -128,3 +128,9 @@ change each on `B15_nbfeat`, built and gated in this order:
 Reading rule vs 0.96069: ≥ +0.002 gain, ≤ −0.002 loss. Finals standing choice: `fam_B15_nbfeat`
 plus `fam_B15_Aoof_random` (ranks 0.973 like it, 0.95849). Both `final_model*.ipynb` must be
 re-executed with the nbfeat columns (pipeline change, not a CONFIG change).
+
+Gate results (2026-10-08): `B15_nbfeat20` ranks 0.989 and `B15_nbfeat_max` 0.994 like `B15_nbfeat`:
+unreadable, not uploaded. More features or a second statistic leave the ranking unchanged; the
+amount of neighbour feature information is saturated at the top-10 means. Next, one change each,
+changing the *kind* of information: `B15_nbfeat_delta` (row value minus neighbour mean, 20 more
+columns) and `B15_nbfeat_all` (means of all 159 features). Both notebooks re-execute after these builds.

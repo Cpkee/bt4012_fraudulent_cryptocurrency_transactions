@@ -190,7 +190,10 @@ neighbours as 20 extra model-B columns, `two_stage(nb_feats=10)`), gated 0.973 v
 0.9689. **Read 2026-10-08: 0.96069, +0.0022, new best.** Neighbour *feature* information helps model B
 once it sees neighbour scores (CV rejected it on the single-stage in step 1: CV is a guide for features
 only when the feature enters the same model). Axis reopened; strength being mapped one change at a time:
-`B15_nbfeat20` (top-20) and `B15_nbfeat_max` (mean + max of the top-10) built and gated 2026-10-08. Keep the ledger and this file current after every reading; re-execute both
+`B15_nbfeat20` (top-20) and `B15_nbfeat_max` (mean + max of the top-10) rank 0.989 / 0.994 like the
+best: unreadable, the amount of neighbour feature information is saturated at the top-10 means. Next,
+changing the kind of information: `B15_nbfeat_delta` (row minus neighbour mean) and `B15_nbfeat_all`
+(means of all 159 features), gated 2026-10-08; both `final_model*.ipynb` re-execute behind them. Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules
 in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `docs/` (see file map).
