@@ -87,3 +87,28 @@ uploaded. **Exit condition reached.** The neighbour-feature axis is closed on am
 Standing from here: finals = `fam_B15_nbfeat_all` + `fam_B15_Aoof_random` (alternative Final 2
 `fam_B15_nbfeat`); `final_model*.ipynb` reproduce the reference; report work resumes; at most one
 slot a day on an idea that changes the information set and passes the gate.
+
+## Round 2 (approved by the user 2026-10-08, after the research below)
+
+Decisions: (1) the third slot of 2026-10-08 goes to a **seed replicate of the leader**
+(`B15_nbfeat_all_seedsB`, seeds 5–9): it fails the distinctness gate by design and is uploaded as a
+noise reading, to tell whether 0.96177 vs 0.96069 is seed luck (the finals pair depends on it);
+(2) two closed setting axes get **one re-read each under the larger model-B input**: per-step
+balanced row weights (`B15_nbfeat_stepbal`, a period-invariance principle not tried before) and
+23 leaves (`B23_nbfeat`); (3) one new information source: **strictly out-of-fold GNN embeddings as
+extra model-B columns** (the literature's "trees + node embeddings" recipe; our in-sample version
+leaked labels in step 3); transductive self-training and unlabelled-neighbour feature means stay
+held; (4) finals = the policy pair `fam_B15_nbfeat_all` + `fam_B15_Aoof_random`.
+
+Research grounding (methods only, never facts about this data):
+- Trees on tabular features beat GNNs on the public dataset with this structure, and adding node
+  embeddings to the trees was the one graph contribution that helped (Weber et al. 2019,
+  arXiv 1908.02591); BGNN (Ivanov & Prokhorenkova, ICLR 2021) makes the same point by feeding
+  GBDT predictions into a GNN. Our two-stage is the collective-classification / stacked-learning
+  idea (neighbour predictions as features; Fast & Jensen 2008; Kou & Cohen 2007).
+- Temporal shift in tabular data (Cai et al., ICML 2025): recent-only training and random
+  within-period splits beat time-ordered protocols — exactly what the board told us (window 14,
+  random OOF); per-period reweighting / group-DRO is the robustness family behind the
+  step-balanced weights.
+- The post-43 collapse is reported for every model family in the literature on the public
+  dataset; nothing published fixes it. We treat it as unfixable and hedge on the private board.

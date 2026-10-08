@@ -126,7 +126,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0,
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
-              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False):
+              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_gnn_embed: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -345,6 +345,17 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
                     for c in nbf:
                         Ftr[f"nbf_{side}_delta_{c}"] = Xtr[c].to_numpy() - Ftr[f"nbf_{side}_mean_{c}"].to_numpy()
                         Fva[f"nbf_{side}_delta_{c}"] = Xva[c].to_numpy() - Fva[f"nbf_{side}_mean_{c}"].to_numpy()
+        if b_gnn_embed:
+            # step 9: strictly out-of-fold GraphSAGE embeddings (+ its probability) as extra model-B
+            # columns, from artifacts/gnn_cache (src/gnn_cache_window.py, a PyTorch-only process):
+            # window rows 5-fold OOF inside the window, apply rows from a model on the whole window
+            vlo, vhi = (36, 49) if _PHASE == "final" else (int(ts_va.min()), int(ts_va.max()))
+            z = np.load(ARTIFACTS / "gnn_cache" / f"win{int(t.max()) - (last_k - 1)}-{int(t.max())}_apply{vlo}-{vhi}_s{seed}.npz")
+            H = z["h_oof"].shape[1]; cols = ["gnn_p"] + [f"gnn_h{i}" for i in range(H)]
+            G_tr = pd.DataFrame(np.c_[z["p_oof"], z["h_oof"]], index=z["tx_oof"], columns=cols).reindex(tx_tr).reset_index(drop=True)
+            G_va = pd.DataFrame(np.c_[z["p_apply"], z["h_apply"]], index=z["tx_apply"], columns=cols).reindex(tx_va).reset_index(drop=True)
+            assert G_va.notna().all().all() and G_tr.iloc[np.flatnonzero(win)].notna().all().all(), "GNN cache does not cover these rows"
+            Ftr = pd.concat([Ftr, G_tr], axis=1); Fva = pd.concat([Fva, G_va], axis=1)
         if step_ctx:
             ctx_tr = pd.Series(pA).groupby(t).transform("mean").to_numpy()          # NaN outside the window (unscored rows)
             ctx_va = pd.Series(pA_va).groupby(ts_va).transform("mean").to_numpy()
@@ -355,6 +366,11 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
         A = pd.concat([Xtr_b, Ftr], axis=1)[win]
         B = pd.concat([Xva_b, Fva], axis=1)
         yB, tB, wB = ytr[win], t[win], wts(win, t.max())
+        if b_step_balance:
+            # step 9 (plan_step9.md): every time step of the window carries the same total weight, so
+            # the large steps (22: 1,763 rows) stop dominating the small ones (27: 206 rows)
+            cnt = pd.Series(tB).map(pd.Series(tB).value_counts()).to_numpy()
+            wB = len(tB) / (np.unique(tB).size * cnt)
         if b_stack_logreg:
             # one extra column for model B: a logistic-regression score on the raw features,
             # random OOF within the window for training rows, full-window fit for the rows to predict
@@ -568,6 +584,15 @@ FAMILIES = {
     # gated 2026-10-08: nbfeat_A 0.991 (unreadable) -> candidate 3: features of the neighbours' neighbours
     "B15_nbfeat_hop2": ("B15 two-stage, random OOF, top-10 neighbour feature means + two-hop feature means (20 more model-B columns), bagged x5", "clean",
                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_hop2=True), BAG5),
+    # step 9, approved 2026-10-08: seed-noise reading of the leader; closed setting axes re-read once under the larger input
+    "B15_nbfeat_all_seedsB": ("B15 two-stage, random OOF, means of all 159 features over labelled neighbours, seeds 5-9 (replicate of the 0.96177 file: seed noise of the leader)", "clean",
+                              two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), (5, 6, 7, 8, 9)),
+    "B15_nbfeat_stepbal": ("B15 two-stage, random OOF, top-10 neighbour feature means, model B with per-step balanced row weights (each window step carries equal total weight), bagged x5", "clean",
+                           two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_step_balance=True), BAG5),
+    "B23_nbfeat": ("two-stage, random OOF, top-10 neighbour feature means, model B = 23 leaves (depth re-check under the larger input), bagged x5", "clean",
+                   two_stage(14, b_params={**B15_PARAMS, "num_leaves": 23}, b_estimators=300, a_oof="random", nb_feats=10), BAG5),
+    "B15_nbfeat_gnn": ("B15 two-stage, random OOF, top-10 neighbour feature means + strictly out-of-fold GraphSAGE embedding (64 dims + probability) as model-B columns, bagged x5", "clean",
+                       two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_gnn_embed=True), BAG5),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),
