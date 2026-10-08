@@ -122,15 +122,18 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_B15_nb_labels / nb_mix50 | training neighbour numbers from labels / half labels | 0.9462 / 0.9542 |
 | fam_B15_Aoof_random | training rows scored by random 5-fold OOF within the window | 0.9585 |
 | **fam_B15_nbfeat** | + means of the top-10 raw features over labelled in/out neighbours (20 model-B columns) | **0.9607** |
+| fam_B15_nbfeat_all | means of all 159 features over labelled in/out neighbours (318 columns) | 0.9618 (tie band, +0.0011; highest public score) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
 Label curve for training neighbour numbers: 0% labels 0.9562, 50% 0.9542, 100% 0.9462 (closed).
-**Current best = fam_B15_nbfeat** (0.96069, 2026-10-08, 7th on the board; `final_model.ipynb` and
-`final_model_kaggle.ipynb` reproduce it exactly). The brief gives
+**Reference = fam_B15_nbfeat** (0.96069; `final_model.ipynb` and `final_model_kaggle.ipynb` reproduce it exactly);
+**highest public score = fam_B15_nbfeat_all** (0.96177, 2026-10-08, 6th on the board; a tie by the reading
+rule, so the simpler file stays the reference and the all-159 file leads the finals). The brief gives
 the lowest-ranked participant 0 points. Finals must be selected by hand on Kaggle (two files;
-the better private score counts). Standing choice, revised whenever the best changes: the best
-file plus the strongest file that ranks < 0.98 like it (currently `fam_B15_Aoof_random`, 0.973).
+the better private score counts). Standing choice, revised whenever the best changes: the highest
+public file plus the strongest file that ranks < 0.97 like it (currently `fam_B15_nbfeat_all` + `fam_B15_Aoof_random`,
+0.960; `fam_B15_nbfeat` ranks 0.979 like the leader and is the alternative Final 2).
 
 ## What we learned (the through-line for the report)
 
@@ -194,8 +197,9 @@ only when the feature enters the same model). Axis reopened; strength being mapp
 `B15_nbfeat20` (top-20) and `B15_nbfeat_max` (mean + max of the top-10) rank 0.989 / 0.994 like the
 best: unreadable, the amount of neighbour feature information is saturated at the top-10 means. Next,
 changing the kind of information: `B15_nbfeat_delta` (row minus neighbour mean) and `B15_nbfeat_all`
-(means of all 159 features), gated 2026-10-08: delta 0.992 (unreadable), **nbfeat_all 0.979 passes, upload
-candidate** (CV 3-fold 0.9627). Both `final_model*.ipynb` re-executed 2026-10-08: they reproduce
+(means of all 159 features), gated 2026-10-08: delta 0.992 (unreadable), **nbfeat_all 0.979 passed and read 0.96177 (+0.0011, tie band;
+highest public score)**: the amount of neighbour feature information is closed. **Next plan: `docs/plans/plan_step9.md`**
+(neighbour feature means into model A as well; `B15_nbfeat_A` building 2026-10-08). Both `final_model*.ipynb` re-executed 2026-10-08: they reproduce
 `fam_B15_nbfeat.csv` exactly (1.1e-16). Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules

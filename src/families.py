@@ -73,6 +73,7 @@ BOARD = {
     "fam_B15_pseudo_unlab.csv": 0.95278,
     "fam_B15_nb_steprank.csv": 0.95560,
     "fam_B15_nbfeat.csv": 0.96069,
+    "fam_B15_nbfeat_all.csv": 0.96177,
 }
 
 
@@ -125,7 +126,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0,
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
-              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False):
+              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -258,6 +259,18 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             return None if not half_life else 0.5 ** ((t_ref - t[mask]) / half_life)
         pA = np.full(len(Xtr), np.nan)
         scored = {}
+        # step 9 (docs/plans/plan_step9.md): the neighbour feature means need no model, so they can
+        # also feed model A (train: labelled window rows as the neighbour set; test: the test file)
+        Xa_tr, Xa_va = Xtr, Xva
+        if nb_feats_into_A:
+            assert nb_feats and not (unlab or b_pseudo_unlab or a_extra_hist), "nb_feats_into_A: unsupported combination"
+            _tx_tr = L_tx[Xtr.index.to_numpy()]
+            _tx_va = T_tx[Xva.index.to_numpy()] if _PHASE == "final" else L_tx[Xva.index.to_numpy()]
+            _nbf = [c for c in IMP_ORDER if c in Xtr.columns][:nb_feats]
+            _v_tr = pd.DataFrame(Xtr[_nbf].to_numpy(), index=_tx_tr, columns=_nbf)[win]
+            _v_va = pd.DataFrame(Xva[_nbf].to_numpy(), index=_tx_va, columns=_nbf)
+            Xa_tr = pd.concat([Xtr.reset_index(drop=True), feat_agg(_tx_tr, _v_tr.index, _v_tr)], axis=1).set_index(Xtr.index)
+            Xa_va = pd.concat([Xva.reset_index(drop=True), feat_agg(_tx_va, _v_va.index, _v_va)], axis=1).set_index(Xva.index)
         if a_oof == "random":
             # 5-fold random out-of-fold scoring within the window: each row scored by a model that
             # saw the other 4/5 of the window (same periods), the way test rows are scored by a
@@ -270,14 +283,14 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             extra = np.flatnonzero((~win) & (t >= t.max() - (last_k - 1) - a_extra_hist)) if a_extra_hist else np.array([], dtype=int)
             for tr_i, va_i in StratifiedKFold(oof_folds, shuffle=True, random_state=seed).split(idx_w, ytr[idx_w]):
                 a_i, b_i = np.r_[idx_w[tr_i], extra], idx_w[va_i]
-                m_f = model(seed).fit(Xtr.iloc[a_i], ytr[a_i]); fold_models.append(m_f)
-                pA[b_i] = m_f.predict_proba(Xtr.iloc[b_i])[:, 1]
+                m_f = model(seed).fit(Xa_tr.iloc[a_i], ytr[a_i]); fold_models.append(m_f)
+                pA[b_i] = m_f.predict_proba(Xa_tr.iloc[b_i])[:, 1]
         else:
             for s_ in np.unique(t[win]):
                 hist = t < s_
                 if hist.sum() < 500: continue
-                mA_s = model(seed).fit(Xtr[hist], ytr[hist], sample_weight=wts(hist, s_ - 1))
-                pA[t == s_] = mA_s.predict_proba(Xtr[t == s_])[:, 1]
+                mA_s = model(seed).fit(Xa_tr[hist], ytr[hist], sample_weight=wts(hist, s_ - 1))
+                pA[t == s_] = mA_s.predict_proba(Xa_tr[t == s_])[:, 1]
                 if unlab:
                     m_u = U_ts == s_
                     if m_u.any():
@@ -295,10 +308,10 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
         if a_test_from_folds and a_oof == "random":
             # test / validation rows scored by the average of the OOF fold models, so they are
             # scored by the same kind of model (trained on (k-1)/k of the window) as the training rows
-            pA_va = np.mean([m_f.predict_proba(Xva)[:, 1] for m_f in fold_models], axis=0)
+            pA_va = np.mean([m_f.predict_proba(Xa_va)[:, 1] for m_f in fold_models], axis=0)
         else:
-            mA = model(seed).fit(Xtr, ytr) if a_all_history else model(seed).fit(Xtr[win], ytr[win], sample_weight=wts(win, t.max()))
-            pA_va = mA.predict_proba(Xva)[:, 1]
+            mA = model(seed).fit(Xa_tr, ytr) if a_all_history else model(seed).fit(Xa_tr[win], ytr[win], sample_weight=wts(win, t.max()))
+            pA_va = mA.predict_proba(Xa_va)[:, 1]
         tx_va = T_tx[Xva.index.to_numpy()] if _PHASE == "final" else L_tx[Xva.index.to_numpy()]
         # step 7 (plan_step7.md): model-A scores on a period-free scale before aggregation, and/or
         # the period level handed to model B as its own column
@@ -539,6 +552,9 @@ FAMILIES = {
                          two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_delta=True), BAG5),
     "B15_nbfeat_all": ("B15 two-stage, random OOF, + means of all 159 raw features over labelled in- and out-neighbours (318 extra model-B columns), bagged x5", "clean",
                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), BAG5),
+    # step 9 (docs/plans/plan_step9.md): read 2026-10-08 nbfeat_all 0.96177 (+0.0011, tie) -> the neighbour feature means also feed model A
+    "B15_nbfeat_A": ("B15 two-stage, random OOF, top-10 neighbour feature means fed to model A as well as model B, bagged x5", "clean",
+                     two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feats_into_A=True), BAG5),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),

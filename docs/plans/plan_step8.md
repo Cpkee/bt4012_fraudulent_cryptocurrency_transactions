@@ -143,3 +143,9 @@ ten?"; upload it as the day's second slot. Reading rule vs 0.96069: ≥ +0.002 g
 Both `final_model.ipynb` and `final_model_kaggle.ipynb` re-executed 2026-10-08 and reproduce
 `fam_B15_nbfeat.csv` exactly (max |difference| 1.1e-16); CV in the notebook: 3-fold 0.9689,
 horizon 0.8215.
+
+Read 2026-10-08 (second slot): **`fam_B15_nbfeat_all` = 0.96177, +0.0011 vs 0.96069: tie band**
+(6th on the board). By the reading rule the simpler top-10 file stays the reference for one-change
+probes; the all-159 file is the highest public score and the lead finals candidate. The amount of
+neighbour feature information is closed (top-10 +0.0022, all 159 +0.0011 more, max / delta / top-20
+unreadable). Next plan: `docs/plans/plan_step9.md`.
