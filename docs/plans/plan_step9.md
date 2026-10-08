@@ -120,3 +120,11 @@ unreadable, period-balanced weights change nothing, the weighting axis stays clo
 the larger input, queued. `B15_nbfeat_gnn` (OOF GraphSAGE embeddings) building; the window cache is
 complete (13 files). Queue for 2026-10-09: slot 1 = the GNN-embedding file if it passes the gate
 (new information first), slot 2 = `B23_nbfeat`, slot 3 held. Reading rule vs 0.96069 unchanged.
+
+**`B15_nbfeat_gnn` passes the gate at 0.932** (CV 3-fold 0.9611, hard 0.8922, horizon 0.8024, PR 0.9041):
+the most distinct candidate built since the recent-window files, as 65 new columns should be. CV is
+the family's lowest but above the 0.95 floor; every neighbour-information gain so far had the lower
+CV. Final queue for 2026-10-09: slot 1 `fam_B15_nbfeat_gnn`, slot 2 `fam_B23_nbfeat`, slot 3 held.
+Readings vs 0.96069: ≥ +0.002 gain, ≤ −0.002 loss. If the GNN file gains, the follow-up is the same
+embeddings on the all-159 base; if it loses, the embedding recipe is closed on the board as the
+in-sample version was on CV.
