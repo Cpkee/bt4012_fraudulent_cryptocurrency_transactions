@@ -202,7 +202,11 @@ highest public score)**: the amount of neighbour feature information is closed. 
 (neighbour feature means into model A as well: `B15_nbfeat_A` ranks 0.991, unreadable, entry point closed;
 `B15_nbfeat_hop2` ranks 0.988, unreadable). **Step-9 exit condition reached 2026-10-08: the neighbour-feature axis
 is closed on amount, statistic, entry point and reach.** Finals = `fam_B15_nbfeat_all` + `fam_B15_Aoof_random`; one slot
-a day for an idea that changes the information set and passes the gate; report work resumes. Both `final_model*.ipynb` re-executed 2026-10-08: they reproduce
+a day for an idea that changes the information set and passes the gate; report work resumes.
+Round 2 (user-approved 2026-10-08, `plan_step9.md`): seed replicate of the leader uploaded as a noise reading;
+per-step balanced weights 0.986 (unreadable); **`B23_nbfeat` passes the gate (0.972)**; OOF GraphSAGE embeddings as
+model-B columns (`gnn_cache_window.py`, `two_stage(b_gnn_embed=True)`) building. Queue 2026-10-09: GNN file if it
+passes, then B23_nbfeat. Both `final_model*.ipynb` re-executed 2026-10-08: they reproduce
 `fam_B15_nbfeat.csv` exactly (1.1e-16). Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules

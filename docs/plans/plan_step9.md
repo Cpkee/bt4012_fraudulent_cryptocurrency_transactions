@@ -112,3 +112,11 @@ Research grounding (methods only, never facts about this data):
   step-balanced weights.
 - The post-43 collapse is reported for every model family in the literature on the public
   dataset; nothing published fixes it. We treat it as unfixable and hedge on the private board.
+
+Round-2 gate results (2026-10-08, evening): `B15_nbfeat_all_seedsB` 0.993 like the leader, uploaded as
+the seed-noise reading (third slot); `B15_nbfeat_stepbal` 0.986 like the reference (CV 3-fold 0.9677):
+unreadable, period-balanced weights change nothing, the weighting axis stays closed;
+**`B23_nbfeat` passes (0.972; CV 3-fold 0.9633, horizon 0.8013)**: a readable depth re-check under
+the larger input, queued. `B15_nbfeat_gnn` (OOF GraphSAGE embeddings) building; the window cache is
+complete (13 files). Queue for 2026-10-09: slot 1 = the GNN-embedding file if it passes the gate
+(new information first), slot 2 = `B23_nbfeat`, slot 3 held. Reading rule vs 0.96069 unchanged.
