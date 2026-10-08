@@ -134,3 +134,12 @@ unreadable, not uploaded. More features or a second statistic leave the ranking 
 amount of neighbour feature information is saturated at the top-10 means. Next, one change each,
 changing the *kind* of information: `B15_nbfeat_delta` (row value minus neighbour mean, 20 more
 columns) and `B15_nbfeat_all` (means of all 159 features). Both notebooks re-execute after these builds.
+
+Round 2 (2026-10-08): `B15_nbfeat_delta` ranks 0.992 like the best (unreadable; a row-minus-mean
+column adds nothing the trees cannot already form). **`B15_nbfeat_all` passes the gate (0.979)**:
+means of all 159 features, CV 3-fold 0.9627 / horizon 0.8018 (the family's lowest, above the 0.95
+floor). It is the reading of "does the whole feature block over neighbours help, or only the top
+ten?"; upload it as the day's second slot. Reading rule vs 0.96069: ≥ +0.002 gain, ≤ −0.002 loss.
+Both `final_model.ipynb` and `final_model_kaggle.ipynb` re-executed 2026-10-08 and reproduce
+`fam_B15_nbfeat.csv` exactly (max |difference| 1.1e-16); CV in the notebook: 3-fold 0.9689,
+horizon 0.8215.
