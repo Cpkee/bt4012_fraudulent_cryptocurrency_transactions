@@ -120,6 +120,39 @@ def lgbm_recency_weighted(half_life: float, params: dict | None = None, n_estima
 _PHASE = "cv"   # run_family sets "final" before the fit on all rows; tells two-stage which rows Xva holds
 
 
+_COMM = None
+
+
+def communities(edges: pd.DataFrame, step_of: pd.Series) -> pd.Series:
+    """Louvain community id per transaction (string "<step>_<k>"), computed once on the whole
+    edge list and cached in ARTIFACTS. Edges never cross steps, so each connected component of
+    the edge graph belongs to one step; Louvain (networkx, seed 0, resolution 1) runs on each
+    step's graph with every node present in the edge list (featureless test-period nodes are
+    structure only). Labels and features play no part, so train and test are treated alike."""
+    global _COMM
+    if _COMM is not None:
+        return _COMM
+    cache = ARTIFACTS / "communities_louvain_s0.csv"
+    if cache.exists():
+        _COMM = pd.read_csv(cache, index_col=0)["comm"]; return _COMM
+    import networkx as nx
+    import scipy.sparse as sp
+    from scipy.sparse.csgraph import connected_components
+    nodes = pd.Index(pd.unique(np.r_[edges.txId1, edges.txId2]))
+    a, b = nodes.get_indexer(edges.txId1), nodes.get_indexer(edges.txId2)
+    _, comp = connected_components(sp.csr_matrix((np.ones(len(a)), (a, b)), shape=(len(nodes),) * 2), directed=False)
+    cs = pd.DataFrame(dict(c=comp, s=step_of.reindex(nodes).to_numpy())).dropna().groupby("c").s.agg(["min", "max"])
+    assert (cs["min"] == cs["max"]).all(), "a connected component spans two time steps"
+    step = cs["min"].reindex(np.arange(comp.max() + 1)).to_numpy()[comp[a]]
+    out = {}
+    for s in np.unique(step[~np.isnan(step)]):
+        e = edges[step == s]
+        G = nx.Graph(); G.add_edges_from(zip(e.txId1, e.txId2))
+        for k, c in enumerate(nx.community.louvain_communities(G, seed=0)):
+            for n in c: out[n] = f"{int(s)}_{k}"
+    _COMM = pd.Series(out, name="comm"); _COMM.to_csv(cache); return _COMM
+
+
 def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 300, hop2: bool = False, unlab: bool = False,
               b_params: dict | None = None, b_estimators: int | None = None, a_all_history: bool = False, half_life: float | None = None,
               b_interact: int = 0, b_rank: bool = False, smooth: float | None = None,
@@ -127,7 +160,8 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0,
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
-              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_gnn_embed: bool = False):
+              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_gnn_embed: bool = False,
+              nb_comm: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -142,7 +176,11 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
     hop2: also min/std of neighbour scores and the mean of neighbours' own neighbour means.
     unlab: model A also scores the unlabelled training rows of the window, which then count
     as neighbours for training rows (test neighbours stay labelled-only: parity deliberately
-    broken to test whether it matters)."""
+    broken to test whether it matters).
+    nb_comm (step 10, docs/plans/plan_step10.md): the community as the neighbourhood unit. Louvain
+    communities on the full per-step graph (unlabelled nodes as structure only, `communities()`);
+    three more model-B columns = mean, max and count of model-A scores over the *other* scored
+    rows of the row's community (blank where there is none), built like the six numbers."""
     from probes import Data as _D
     base = {**LGBM_PARAMS, **(params or {}), "n_estimators": n_estimators}
     d = _D(); edges = d.edges
@@ -346,6 +384,27 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
                     for c in nbf:
                         Ftr[f"nbf_{side}_delta_{c}"] = Xtr[c].to_numpy() - Ftr[f"nbf_{side}_mean_{c}"].to_numpy()
                         Fva[f"nbf_{side}_delta_{c}"] = Xva[c].to_numpy() - Fva[f"nbf_{side}_mean_{c}"].to_numpy()
+        if nb_comm:
+            comm = communities(edges, pd.concat([d.train.set_index("txId")["time_step"], d.test.set_index("txId")["time_step"]]))
+
+            def comm_feats(tx_rows: np.ndarray, sc: pd.Series) -> pd.DataFrame:
+                """mean / max / count of `sc` over the other scored rows of each row's community."""
+                c_sc = comm.reindex(sc.index).to_numpy()
+                g = pd.DataFrame(dict(c=c_sc, v=sc.to_numpy())).dropna().groupby("c").v
+                top2 = g.nlargest(2).groupby(level=0).agg(["max", "min", "size"])    # largest and second-largest
+                stats = pd.concat([g.agg(["sum", "size"]), top2.rename(columns={"max": "m1", "min": "m2", "size": "nt"})], axis=1)
+                c_rows = comm.reindex(tx_rows).to_numpy()
+                st = stats.reindex(c_rows)
+                own = sc.reindex(tx_rows).to_numpy()
+                in_sc = ~np.isnan(own)
+                n_other = st["size"].fillna(0).to_numpy() - in_sc
+                mean_other = (st["sum"].to_numpy() - np.where(in_sc, own, 0)) / np.maximum(n_other, 1)
+                # max over the others: the community max unless the row alone holds it
+                max_other = np.where(in_sc & (own >= st["m1"].to_numpy()) & (st["nt"].to_numpy() >= 2), st["m2"].to_numpy(), st["m1"].to_numpy())
+                blank = n_other < 1
+                return pd.DataFrame({"comm_mean": np.where(blank, np.nan, mean_other), "comm_max": np.where(blank, np.nan, max_other),
+                                     "comm_n": n_other})
+            Ftr = pd.concat([Ftr, comm_feats(tx_tr, sc_tr)], axis=1); Fva = pd.concat([Fva, comm_feats(tx_va, sc_va)], axis=1)
         if b_gnn_embed:
             # step 9: strictly out-of-fold GraphSAGE embeddings (+ its probability) as extra model-B
             # columns, from artifacts/gnn_cache (src/gnn_cache_window.py, a PyTorch-only process):
@@ -594,6 +653,9 @@ FAMILIES = {
                    two_stage(14, b_params={**B15_PARAMS, "num_leaves": 23}, b_estimators=300, a_oof="random", nb_feats=10), BAG5),
     "B15_nbfeat_gnn": ("B15 two-stage, random OOF, top-10 neighbour feature means + strictly out-of-fold GraphSAGE embedding (64 dims + probability) as model-B columns, bagged x5", "clean",
                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_gnn_embed=True), BAG5),
+    # step 10 (docs/plans/plan_step10.md, Lecture 8 SNA): the community as the neighbourhood unit
+    "B15_nbfeat_comm": ("B15 two-stage, random OOF, top-10 neighbour feature means + mean/max/count of model-A scores over the other scored rows of the row's Louvain community (3 model-B columns), bagged x5", "clean",
+                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_comm=True), BAG5),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),

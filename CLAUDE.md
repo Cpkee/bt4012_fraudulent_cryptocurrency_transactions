@@ -218,6 +218,16 @@ reduction and hedged finals, not more ±0.002 readings; `final_model*.ipynb` now
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules
 in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `docs/` (see file map).
 
+**Step 10 (2026-10-09, `docs/plans/plan_step10.md`): Lecture 8 (Social Network Analysis) mapped onto the
+pipeline.** Measured: all 35 train steps are homophilic (cross-edge rate r ≈ 0.25 × the chance level 2xy in
+the window), the data-grounded justification of the two-stage; fraud PageRank with the row's own score removed
+from the restart adds little over the one-hop mean (AUC 0.896 vs 0.877, not built); **Louvain communities on
+the full per-step graph reach 99.5% of rows where labelled one-hop neighbours reach 78%**, and the community
+mean carries more label signal (0.92 vs 0.85). Built `B15_nbfeat_comm` (`two_stage(nb_comm=True)`: mean / max /
+count of model-A scores over the other scored rows of the row's community, 3 model-B columns; partition cached
+at `artifacts/communities_louvain_s0.csv`, label- and feature-free): **passes the gate at 0.963 with the family's
+best CV (3-fold 0.9769, horizon 0.8511)**; slot 3 of 2026-10-09. Reading rule vs 0.96069: ±0.003.
+
 ## Future implementation notes
 
 - Run scripts from anywhere as `.venv/bin/python src/families.py <name>` (also `src/probes.py`,
@@ -257,7 +267,7 @@ in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `d
 | `notebooks/main.ipynb` | experiment notebook, sections 5–16 (steps 1–3), executed; its first code cell moves the kernel to the repo root and puts `src/` on the path. Steps 5–6 live in `src/families.py` + ledger |
 | `docs/results.md` | ledger of every file with CV and public score |
 | `docs/report_notes.md` | methodology and results write-up with every table; `docs/figures/` diagrams |
-| `docs/plans/plan_step1..6.md` | step plans (`plan_step6.md` = the current round) |
+| `docs/plans/plan_step1..10.md` | step plans (`plan_step10.md` = the current round: Lecture 8 SNA mapping, community columns) |
 | `docs/instructions.md` | competition reference |
 | `submissions/`, `artifacts/` | (gitignored) every CSV; CV tables, caches and `family_*.json` |
 | `AGENTS.md` | pointer to this file for other agents |
