@@ -75,6 +75,8 @@ BOARD = {
     "fam_B15_nbfeat.csv": 0.96069,
     "fam_B15_nbfeat_all.csv": 0.96177,
     "fam_B15_nbfeat_all_seedsB.csv": 0.96323,
+    "fam_B15_nbfeat_all_bag10.csv": 0.96263,
+    "fam_B15_nbfeat_gnn.csv": 0.95570,
 }
 
 
@@ -647,6 +649,11 @@ FAMILIES = {
     # step 9, approved 2026-10-08: seed-noise reading of the leader; closed setting axes re-read once under the larger input
     "B15_nbfeat_all_seedsB": ("B15 two-stage, random OOF, means of all 159 features over labelled neighbours, seeds 5-9 (replicate of the 0.96177 file: seed noise of the leader)", "clean",
                               two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), (5, 6, 7, 8, 9)),
+    # step 10 (docs/plans/plan_step10.md): variance reduction for the finals — more seeds of the two finals models
+    "B15_nbfeat_all_seedsC": ("B15 two-stage, random OOF, means of all 159 features over labelled neighbours, seeds 10-14 (third 5-seed bag for the 15-seed finals file)", "clean",
+                              two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), (10, 11, 12, 13, 14)),
+    "B15_Aoof_random_seedsB": ("B15 two-stage with random 5-fold OOF scoring, seeds 5-9 (second 5-seed bag for the 10-seed Final 2)", "clean",
+                               two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random"), (5, 6, 7, 8, 9)),
     "B15_nbfeat_stepbal": ("B15 two-stage, random OOF, top-10 neighbour feature means, model B with per-step balanced row weights (each window step carries equal total weight), bagged x5", "clean",
                            two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_step_balance=True), BAG5),
     "B23_nbfeat": ("two-stage, random OOF, top-10 neighbour feature means, model B = 23 leaves (depth re-check under the larger input), bagged x5", "clean",
