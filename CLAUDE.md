@@ -127,6 +127,7 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_B15_nbfeat_all_seedsB | the same model, seeds 5–9 (noise reading) | **0.9632** (+0.0015 = seed noise; highest public score) |
 | fam_B15_nbfeat_all_bag10 | the 10-seed bag of the two above (Final 1 until the 15-seed bag) | 0.9626 |
 | fam_B15_nbfeat_gnn | + out-of-fold GraphSAGE embeddings as model-B columns | 0.9557 (−0.005, closed) |
+| fam_B15_nbfeat_comm | + mean/max/count of model-A scores over the row's Louvain community (3 model-B columns) | 0.9573 (−0.0034, closed) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
@@ -222,7 +223,7 @@ with `seeds=tuple(range(15))` once the 15-seed bag is the finals file. Keep the 
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules
 in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `docs/` (see file map).
 
-**Step 10 (2026-10-09, `docs/plans/plan_step10.md`): Lecture 8 (Social Network Analysis) mapped onto the
+**Step 10, SNA track (2026-10-09, `docs/plans/plan_step10_sna.md`): Lecture 8 (Social Network Analysis) mapped onto the
 pipeline.** Measured: all 35 train steps are homophilic (cross-edge rate r ≈ 0.25 × the chance level 2xy in
 the window), the data-grounded justification of the two-stage; fraud PageRank with the row's own score removed
 from the restart adds little over the one-hop mean (AUC 0.896 vs 0.877, not built); **Louvain communities on
@@ -230,7 +231,12 @@ the full per-step graph reach 99.5% of rows where labelled one-hop neighbours re
 mean carries more label signal (0.92 vs 0.85). Built `B15_nbfeat_comm` (`two_stage(nb_comm=True)`: mean / max /
 count of model-A scores over the other scored rows of the row's community, 3 model-B columns; partition cached
 at `artifacts/communities_louvain_s0.csv`, label- and feature-free): **passes the gate at 0.963 with the family's
-best CV (3-fold 0.9769, horizon 0.8511)**; slot 3 of 2026-10-09. Reading rule vs 0.96069: ±0.003.
+best CV (3-fold 0.9769, horizon 0.8511)**; took slot 3 of 2026-10-09 (the 15-seed finals bag moves to 2026-10-10).
+**Read 2026-10-09: 0.95732, −0.0034 vs 0.96069: a loss.** The community unit reaches more rows and has the better CV,
+yet the board rejects it like every other multi-hop / wider-neighbourhood variant (2-hop, bridge, smoothing, GNN):
+the graph's usable content on the test period is the labelled one-hop neighbourhood, and CV is again wrong about a
+neighbour-information change in the direction opposite to before. **Community / SNA axis closed** (homophily curve and
+the PageRank self-score trap remain report material).
 
 ## Future implementation notes
 
@@ -271,7 +277,7 @@ best CV (3-fold 0.9769, horizon 0.8511)**; slot 3 of 2026-10-09. Reading rule vs
 | `notebooks/main.ipynb` | experiment notebook, sections 5–16 (steps 1–3), executed; its first code cell moves the kernel to the repo root and puts `src/` on the path. Steps 5–6 live in `src/families.py` + ledger |
 | `docs/results.md` | ledger of every file with CV and public score |
 | `docs/report_notes.md` | methodology and results write-up with every table; `docs/figures/` diagrams |
-| `docs/plans/plan_step1..10.md` | step plans (`plan_step10.md` = the current round: Lecture 8 SNA mapping, community columns) |
+| `docs/plans/plan_step1..10.md`, `plan_step10_sna.md` | step plans (`plan_step10.md` = the current round: variance, finals, report; `plan_step10_sna.md` = the Lecture 8 SNA mapping, homophily and community diagnostics, closed 2026-10-09) |
 | `docs/instructions.md` | competition reference |
 | `submissions/`, `artifacts/` | (gitignored) every CSV; CV tables, caches and `family_*.json` |
 | `AGENTS.md` | pointer to this file for other agents |

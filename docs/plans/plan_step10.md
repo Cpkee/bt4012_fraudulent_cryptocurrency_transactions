@@ -27,12 +27,12 @@ offers more than that with any confidence.
 
 ## Step 10 actions
 
-### 1. Final 1 = a 15-seed bag of the all-159 model (today's third slot)
+### 1. Final 1 = a 15-seed bag of the all-159 model (planned for today's third slot; that slot went to `fam_B15_nbfeat_comm`, 0.95732, see `plan_step10_sna.md`, so: first slot of 2026-10-10)
 `B15_nbfeat_all_seedsC` (seeds 10–14) is building; `fam_B15_nbfeat_all_bag15.csv` = the probability
 average of the three 5-seed bags. Upload it today so it is selectable. Reading: a sanity check only
 (expected 0.9622–0.9630); the point is variance on the private board.
 
-### 2. Final 2 = a 10-seed bag of the previous architecture (first slot of 2026-10-10)
+### 2. Final 2 = a 10-seed bag of the previous architecture (second slot of 2026-10-10)
 `B15_Aoof_random_seedsB` (seeds 5–9) is queued behind it; `fam_B15_Aoof_random_bag10.csv` = the
 average with the scored seeds 0–4 file (0.95849). It ranks about 0.96 like Final 1, which is the hedge
 the policy asks for, with half the seed variance. Upload it so it is selectable; expected 0.958–0.960.
