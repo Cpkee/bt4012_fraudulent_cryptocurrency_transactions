@@ -125,6 +125,8 @@ slots is a day of lost information: there should always be readable candidates b
 | **fam_B15_nbfeat** | + means of the top-10 raw features over labelled in/out neighbours (20 model-B columns) | **0.9607** |
 | fam_B15_nbfeat_all | means of all 159 features over labelled in/out neighbours (318 columns) | 0.9618 (tie band, +0.0011) |
 | fam_B15_nbfeat_all_seedsB | the same model, seeds 5–9 (noise reading) | **0.9632** (+0.0015 = seed noise; highest public score) |
+| fam_B15_nbfeat_all_bag10 | the 10-seed bag of the two above (Final 1 until the 15-seed bag) | 0.9626 |
+| fam_B15_nbfeat_gnn | + out-of-fold GraphSAGE embeddings as model-B columns | 0.9557 (−0.005, closed) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
@@ -134,9 +136,9 @@ Label curve for training neighbour numbers: 0% labels 0.9562, 50% 0.9542, 100% 0
 0.96069 → 0.96177 → 0.96323 steps are all inside seed noise). **Final 1 = `fam_B15_nbfeat_all_bag10`** (the
 10-seed bag = probability average of the two scored 5-seed files; must be uploaded to be selectable). The brief gives
 the lowest-ranked participant 0 points. Finals must be selected by hand on Kaggle (two files;
-the better private score counts). Standing choice, revised whenever the best changes: the 10-seed bag of the
-highest-scoring model plus the strongest file that ranks < 0.97 like it (currently `fam_B15_nbfeat_all_bag10` +
-`fam_B15_Aoof_random`, 0.964).
+the better private score counts). Standing choice, revised whenever the best changes: the largest seed bag of the
+highest-scoring model plus a seed bag of the strongest file that ranks < 0.97 like it (step 10: `fam_B15_nbfeat_all_bag15` +
+`fam_B15_Aoof_random_bag10`; the 10-seed Final 1 read 0.96263).
 
 ## What we learned (the through-line for the report)
 
@@ -209,11 +211,13 @@ a day for an idea that changes the information set and passes the gate; report w
 Round 2 (user-approved 2026-10-08, `plan_step9.md`): seed replicate of the leader uploaded as a noise reading;
 per-step balanced weights 0.986 (unreadable); **`B23_nbfeat` passes the gate (0.972)**; OOF GraphSAGE embeddings as
 model-B columns (`gnn_cache_window.py`, `two_stage(b_gnn_embed=True)`) **passes the gate at 0.932** (CV 3-fold 0.9611). **Seed replicate read 0.96323**: seed noise
-0.0015 on this model. Queue 2026-10-09: slot 1 `fam_B15_nbfeat_gnn` (0.932, large enough to read), slot 2 the finals
-file `fam_B15_nbfeat_all_bag10` (unreadable by construction, uploaded so it can be selected), slot 3 held;
-`B23_nbfeat` (0.972) is deferred: a depth re-check's delta would sit inside seed noise. Direction: variance
-reduction and hedged finals, not more ±0.002 readings; `final_model*.ipynb` now target the 10-seed all-159 bag. Both `final_model*.ipynb` re-executed 2026-10-08: they reproduce
-`fam_B15_nbfeat.csv` exactly (1.1e-16). Keep the ledger and this file current after every reading; re-execute both
+0.0015 on this model. **Read 2026-10-09: `fam_B15_nbfeat_gnn` 0.95570 (−0.005, clear loss: the trees + embeddings
+recipe is closed on the board as the in-sample version was on CV); `fam_B15_nbfeat_all_bag10` 0.96263** (between its
+parents: Final 1 selectable). `B23_nbfeat` (0.972) deferred for good: a depth re-check's delta would sit inside seed
+noise. **Next plan: `docs/plans/plan_step10.md`** (variance, finals, report): Final 1 = the 15-seed bag
+`fam_B15_nbfeat_all_bag15` (seeds 10–14 built 2026-10-09), Final 2 = `fam_B15_Aoof_random_bag10` (seeds 5–9); reading
+rule revised to ±0.003. `final_model*.ipynb` reproduce the 10-seed all-159 bag exactly (4.4e-16, 2026-10-08); re-execute
+with `seeds=tuple(range(15))` once the 15-seed bag is the finals file. Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules
 in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `docs/` (see file map).

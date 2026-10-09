@@ -152,3 +152,8 @@ the 10-seed all-159 bag (CONFIG: `nb_features="all"`, `seeds` 0–9); re-executi
 **max |difference| vs `fam_B15_nbfeat_all_bag10.csv` = 4.4e-16** (notebook CV: 3-fold 0.9628, horizon
 0.8018). A first run in file column order differed by 0.066: the neighbour-feature block must be added
 in the step-1 gain order (now an explicit list in `CONFIG`).
+
+## Closed (2026-10-09)
+
+`fam_B15_nbfeat_gnn` read **0.95570 (−0.005)**: the embedding recipe is closed on the board. `fam_B15_nbfeat_all_bag10`
+read **0.96263**, between its parents. Step 9 ends here; step 10 (`plan_step10.md`) is variance, finals and the report.
