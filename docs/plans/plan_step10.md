@@ -94,3 +94,27 @@ question can be answered, so it is read directly:
 Reading vs 0.96313: ≥ +0.003 → the post-43 ordering is the lever, map λ and the per-step scale;
 ≤ −0.003 → the collapse is a real base-rate drop, the raw level stays, the question is closed for
 good; between → try λ = 0.75. Nothing in the model changes; both files are built from Final 1.
+
+**Read 2026-10-10: `fam_bag15_steprank` = 0.94124, −0.022.** The clearest reading of the project: the cross-period
+level carries 0.022 of public AUC, the post-43 collapse is a real base-rate drop as far as the board can tell, and any
+change that flattens period levels loses. The hedged λ = 0.75 file is not uploaded (no decision value).
+
+## Next change (2026-10-10): the mirror reading — amplify the period level
+
+The within-step rank erased the period level and lost 0.022, so the level is informative. Whether the
+model *under*-uses it is unknown: its test-period levels come from the features alone (no labels), and
+the pooled metric rewards getting them right. The mirror probe sharpens each period's level by a fixed
+factor in log-odds, keeping the ordering inside every period unchanged:
+logit(q) = logit(p) + α · (logit(step mean of p) − logit(overall mean of p)).
+- `fam_bag15_levelamp25.csv` (α = 0.25, Spearman 0.974 vs Final 1): **upload first.**
+- `fam_bag15_levelamp50.csv` (α = 0.5, 0.907): the follow-up if α = 0.25 gains.
+An EM / Bayes prior shift (`drift.prior_shift_correct`) was built and discarded: the post-43 prior
+estimates hit the floor (0.001) and the file reordered Final 1 wholesale (Spearman 0.58).
+
+Reading vs 0.96313 (±0.003): gain → the level is under-used, map α (0.5, then 1.0) and make the
+amplified file Final 1; loss → the model already uses the level fully, the period-level axis is closed
+in both directions; tie → closed as well (the simpler file wins). Prior: a coin flip at best. It is the
+last cheap lever that targets the 0.005 gap; if it fails, the public search is over for this pipeline:
+finals stand (`fam_B15_nbfeat_all_bag15` + `fam_B15_Aoof_random_bag10`), the report takes the time,
+and one slot a day stays open for an information source from outside the 159 features and the
+labelled-only graph.
