@@ -70,3 +70,5 @@ variance-reduced file should be). Final 1 confirmed. `fam_B15_Aoof_random_bag10`
 Notebooks re-executing with `seeds=tuple(range(15))` to reproduce the 15-seed file.
 `fam_B15_Aoof_random_bag10` read **0.95970** (second slot of 2026-10-10; +0.0012 vs its 5-seed parent). Both finals are
 scored and selectable: **select `fam_B15_nbfeat_all_bag15` and `fam_B15_Aoof_random_bag10` on Kaggle.** Third slot held.
+`final_model.ipynb` and `final_model_kaggle.ipynb` re-executed 2026-10-10 with 15 seeds: **max |difference| vs
+`fam_B15_nbfeat_all_bag15.csv` = 4.4e-16** in both. The notebook standard is met for Final 1.

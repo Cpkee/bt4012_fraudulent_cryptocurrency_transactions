@@ -219,8 +219,7 @@ recipe is closed on the board as the in-sample version was on CV); `fam_B15_nbfe
 parents: Final 1 selectable). `B23_nbfeat` (0.972) deferred for good: a depth re-check's delta would sit inside seed
 noise. **Next plan: `docs/plans/plan_step10.md`** (variance, finals, report): Final 1 = the 15-seed bag
 `fam_B15_nbfeat_all_bag15` (seeds 10–14 built 2026-10-09), Final 2 = `fam_B15_Aoof_random_bag10` (seeds 5–9); reading
-rule revised to ±0.003. `final_model*.ipynb` reproduce the 10-seed all-159 bag exactly (4.4e-16, 2026-10-08); re-execute
-with `seeds=tuple(range(15))` once the 15-seed bag is the finals file. Keep the ledger and this file current after every reading; re-execute both
+rule revised to ±0.003. `final_model*.ipynb` reproduce **Final 1, the 15-seed all-159 bag, exactly (4.4e-16, 2026-10-10)**. Keep the ledger and this file current after every reading; re-execute both
 `final_model*.ipynb` whenever the best changes. Note (2026-10-04): `final_model_kaggle.ipynb`
 (GPU switch, Kaggle paths) was added outside this session. Repo reorganised 2026-10-05: modules
 in `src/`, `main.ipynb` in `notebooks/`, ledger / report / plans / figures in `docs/` (see file map).
