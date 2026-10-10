@@ -68,3 +68,5 @@ model wins). The ±0.002 band under-stated the final model's seed noise (0.0015)
 `fam_B15_nbfeat_all_bag15` read **0.96313** (first slot of 2026-10-10; +0.0005 vs the 10-seed bag: within noise, as a
 variance-reduced file should be). Final 1 confirmed. `fam_B15_Aoof_random_bag10` is the second slot of 2026-10-10.
 Notebooks re-executing with `seeds=tuple(range(15))` to reproduce the 15-seed file.
+`fam_B15_Aoof_random_bag10` read **0.95970** (second slot of 2026-10-10; +0.0012 vs its 5-seed parent). Both finals are
+scored and selectable: **select `fam_B15_nbfeat_all_bag15` and `fam_B15_Aoof_random_bag10` on Kaggle.** Third slot held.
