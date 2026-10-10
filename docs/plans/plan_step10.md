@@ -72,3 +72,25 @@ Notebooks re-executing with `seeds=tuple(range(15))` to reproduce the 15-seed fi
 scored and selectable: **select `fam_B15_nbfeat_all_bag15` and `fam_B15_Aoof_random_bag10` on Kaggle.** Third slot held.
 `final_model.ipynb` and `final_model_kaggle.ipynb` re-executed 2026-10-10 with 15 seeds: **max |difference| vs
 `fam_B15_nbfeat_all_bag15.csv` = 4.4e-16** in both. The notebook standard is met for Final 1.
+
+## Next submission (2026-10-10): the cross-period calibration question
+
+The gap to the top entry (0.96805 − 0.96313 = 0.0049) is three times the seed noise and sits on the
+same public sample, so it is real. Every input-side axis is closed; the one mechanism never read on
+the current model is how scores from different test periods are ordered against each other. 44% of
+the test rows are in steps 43–49, where Final 1 marks at most 0.6% of rows as likely illicit (mean
+score 0.003–0.014 vs 0.02–0.13 before step 43). Under pooled AUC those rows sit below almost every
+pre-43 row. If the true illicit rate after step 43 is as low as the model believes, that ordering is
+right; if the collapse is partly the model's blindness to a changed period, every illicit row there
+is mis-ranked below thousands of licit pre-43 rows, and that is exactly where 0.005 could hide.
+
+Historical CV says the raw level is right (within-step rank cost 0.025 on far windows); the one board
+reading, step-mean equalisation on sub_07, was flat (+0.001). The test period is the only place the
+question can be answered, so it is read directly:
+- `fam_B15_bag15_steprank.csv`: Final 1 replaced by its within-step percentile rank (every step gets
+  the same score distribution). Spearman 0.962 vs Final 1: the clearest reading. **Upload first.**
+- `fam_B15_bag15_steprank75.csv`: 75% within-step rank, 25% pooled rank (0.978): the hedged version,
+  for the follow-up.
+Reading vs 0.96313: ≥ +0.003 → the post-43 ordering is the lever, map λ and the per-step scale;
+≤ −0.003 → the collapse is a real base-rate drop, the raw level stays, the question is closed for
+good; between → try λ = 0.75. Nothing in the model changes; both files are built from Final 1.
