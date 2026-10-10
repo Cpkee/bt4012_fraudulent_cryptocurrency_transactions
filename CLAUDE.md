@@ -128,6 +128,7 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_B15_nbfeat_all_bag10 | the 10-seed bag of the two above (Final 1 until the 15-seed bag) | 0.9626 |
 | fam_B15_nbfeat_gnn | + out-of-fold GraphSAGE embeddings as model-B columns | 0.9557 (−0.005, closed) |
 | fam_B15_nbfeat_comm | + mean/max/count of model-A scores over the row's Louvain community (3 model-B columns) | 0.9573 (−0.0034, closed) |
+| **fam_B15_nbfeat_all_bag15** | the 15-seed bag (seeds 0–14) of the all-159 model: **Final 1** | **0.9631** (2026-10-10) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
@@ -138,8 +139,8 @@ Label curve for training neighbour numbers: 0% labels 0.9562, 50% 0.9542, 100% 0
 10-seed bag = probability average of the two scored 5-seed files; must be uploaded to be selectable). The brief gives
 the lowest-ranked participant 0 points. Finals must be selected by hand on Kaggle (two files;
 the better private score counts). Standing choice, revised whenever the best changes: the largest seed bag of the
-highest-scoring model plus a seed bag of the strongest file that ranks < 0.97 like it (step 10: `fam_B15_nbfeat_all_bag15` +
-`fam_B15_Aoof_random_bag10`; the 10-seed Final 1 read 0.96263).
+highest-scoring model plus a seed bag of the strongest file that ranks < 0.97 like it (step 10: `fam_B15_nbfeat_all_bag15` = **0.96313** +
+`fam_B15_Aoof_random_bag10`; select both on Kaggle once the second has a score).
 
 ## What we learned (the through-line for the report)
 

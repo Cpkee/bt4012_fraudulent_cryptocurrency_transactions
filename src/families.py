@@ -78,6 +78,7 @@ BOARD = {
     "fam_B15_nbfeat_all_bag10.csv": 0.96263,
     "fam_B15_nbfeat_gnn.csv": 0.95570,
     "fam_B15_nbfeat_comm.csv": 0.95732,
+    "fam_B15_nbfeat_all_bag15.csv": 0.96313,
 }
 
 
