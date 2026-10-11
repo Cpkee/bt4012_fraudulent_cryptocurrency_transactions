@@ -657,6 +657,8 @@ FAMILIES = {
     # step 10 (docs/plans/plan_step10.md): variance reduction for the finals — more seeds of the two finals models
     "B15_nbfeat_all_seedsC": ("B15 two-stage, random OOF, means of all 159 features over labelled neighbours, seeds 10-14 (third 5-seed bag for the 15-seed finals file)", "clean",
                               two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), (10, 11, 12, 13, 14)),
+    "B15_nbfeat_all_seedsD": ("B15 two-stage, random OOF, means of all 159 features over labelled neighbours, seeds 15-29 (15 more seeds for the 30-seed finals file)", "clean",
+                              two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), tuple(range(15, 30))),
     "B15_Aoof_random_seedsB": ("B15 two-stage with random 5-fold OOF scoring, seeds 5-9 (second 5-seed bag for the 10-seed Final 2)", "clean",
                                two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random"), (5, 6, 7, 8, 9)),
     "B15_nbfeat_stepbal": ("B15 two-stage, random OOF, top-10 neighbour feature means, model B with per-step balanced row weights (each window step carries equal total weight), bagged x5", "clean",

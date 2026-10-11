@@ -246,6 +246,13 @@ the graph's usable content on the test period is the labelled one-hop neighbourh
 neighbour-information change in the direction opposite to before. **Community / SNA axis closed** (homophily curve and
 the PageRank self-score trap remain report material).
 
+**2026-10-11 (user decision, two slots; `plan_step10.md` tail):** slot 1 = `fam_bag15_post43floor` (`src/post43_probes.py`:
+Final 1 with the post-43 block, 43.6% of rows, ranked below every pre-43 row, block order kept; Spearman 0.456): reads
+how much rankable fraud the post-43 block holds (≈ 0 → closed for good; a clear loss → the floor becomes a protocol for
+comparing post-43 scorers with the cross-block terms held fixed). Slot 2 = `fam_B15_nbfeat_all_bag30` (seeds 15–29
+building as `B15_nbfeat_all_seedsD`, averaged with Final 1): variance only, unreadable by construction, uploaded to be
+selectable; notebooks go to 30 seeds only if it is selected.
+
 ## Future implementation notes
 
 - Run scripts from anywhere as `.venv/bin/python src/families.py <name>` (also `src/probes.py`,
