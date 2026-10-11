@@ -132,6 +132,8 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_B15_Aoof_random_bag10 | the 10-seed bag of the random-OOF two-stage: **Final 2** (ranks 0.964 like Final 1) | 0.9597 (2026-10-10) |
 | fam_bag15_steprank | Final 1 replaced by its within-step percentile rank (cross-period calibration question) | 0.9412 (−0.022: the period level is right; closed) |
 | fam_bag15_levelamp25 | Final 1 with each period's level amplified by 0.25 in log-odds (the mirror probe) | 0.9617 (−0.0015, tie band: the level is used about right; axis closed both ways) |
+| fam_bag15_post43floor | Final 1 with the post-43 block ranked below every pre-43 row (information probe) | 0.8920 (−0.071: the block holds ≈ 1.3–2.4% fraud that Final 1 ranks above most pre-43 licit rows) |
+| fam_B15_nbfeat_all_bag30 | the 30-seed bag (seeds 0–29) of the all-159 model | 0.9631 (= bag15: seed variance flat from 15 seeds; Final 1 stays bag15) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.

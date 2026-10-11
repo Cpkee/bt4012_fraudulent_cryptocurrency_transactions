@@ -161,3 +161,7 @@ candidate's order; the difference vs 0.89203 reads the candidate's within-block 
 = `sub_06` (the broadest training distribution; the hypothesis is that the recent window, which wins pre-43, is not the
 best window for the shifted block). A positive reading would make the final file "Final 1 with the post-43 order
 replaced, mapped onto Final 1's post-43 value range" (the level stays, which the level probes showed is right).
+
+**Read 2026-10-11: `fam_B15_nbfeat_all_bag30` = 0.96307** (bag15 0.96313): the 30-seed bag is identical to the 15-seed bag
+on the public board. Seed variance is flat from 15 seeds on; the axis is closed. Final 1 stays `fam_B15_nbfeat_all_bag15`
+(the notebooks already reproduce it exactly); bag30 is on the board as a selectable equivalent and nothing more.

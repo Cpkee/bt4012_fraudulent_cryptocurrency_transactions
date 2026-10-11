@@ -83,6 +83,7 @@ BOARD = {
     "fam_bag15_steprank.csv": 0.94124,
     "fam_bag15_levelamp25.csv": 0.96165,
     "fam_bag15_post43floor.csv": 0.89203,
+    "fam_B15_nbfeat_all_bag30.csv": 0.96307,
 }
 
 
