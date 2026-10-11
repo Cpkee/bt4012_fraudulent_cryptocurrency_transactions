@@ -252,6 +252,13 @@ how much rankable fraud the post-43 block holds (≈ 0 → closed for good; a cl
 comparing post-43 scorers with the cross-block terms held fixed). Slot 2 = `fam_B15_nbfeat_all_bag30` (seeds 15–29
 building as `B15_nbfeat_all_seedsD`, averaged with Final 1): variance only, unreadable by construction, uploaded to be
 selectable; notebooks go to 30 seeds only if it is selected.
+**Read 2026-10-11: `fam_bag15_post43floor` = 0.89203, −0.071.** The post-43 block holds fraud (≈ 1.3–2.4% of its public
+rows, 27–49 positives) that Final 1 ranks above most pre-43 licit rows; the within-block ordering term has weight ≈ 0.06–0.10,
+so a better post-43 ordering is worth up to ≈ 0.01–0.02, with board noise ≈ 0.004 on that term. **Open lever: the post-43
+ordering, read through the floor protocol** (`post43_probes.py floorsplice`: pre-43 = Final 1, post-43 floored with a
+candidate's order; difference vs 0.89203 = the candidate's within-block quality). Existing files order the block 0.84–0.96
+like Final 1; first candidate `sub_06` (all-history, 0.844) is built (`fam_post43floor_sub06`). A candidate that reads positive
+becomes "Final 1 with its post-43 order, mapped onto Final 1's post-43 value range" (the level stays: the level probes say it is right).
 
 ## Future implementation notes
 

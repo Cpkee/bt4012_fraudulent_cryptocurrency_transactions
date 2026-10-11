@@ -51,6 +51,21 @@ def block_probe(kind: str, key: str):
     return name, q, desc
 
 
+def floor_splice(base_key: str, cand_key: str):
+    """Floored file whose pre-43 part is the base file's and whose post-43 *order* is the candidate's.
+    Versus the base's own floor file, the score difference is n_f2*n_l2*(A22_cand - A22_base)/(n_f*n_l):
+    a direct reading of the candidate's within-block ranking quality (weight ≈ 0.06-0.10 on the public sample, so a
+    0.003 reading needs ΔA22 ≈ 0.04; with ~35 positives the board's own noise on this term is ≈ 0.004)."""
+    fb, sb, ts = _load(base_key); fc, sc, _ = _load(cand_key)
+    post = ts >= SPLIT
+    rb = rankdata(sb["target"]) / len(sb); rc = rankdata(sc["target"]) / len(sc)
+    q = np.where(post, rc * 1e-3, rb)
+    name = f"post43floor_{cand_key.replace('fam_', '').replace('sub_', 'sub')}"
+    desc = (f"post-43 floor protocol: pre-43 rows = {fb.split('.')[0]} (Final 1), post-43 block ranked below them with the "
+            f"block order of {fc.split('.')[0]}; vs fam_bag15_post43floor (0.89203) reads that file's within-post-43 ranking quality")
+    return name, q, desc
+
+
 def bag(name: str, keys: list[str]):
     files = [resolve(k) for k in keys]
     q = np.mean([pd.read_csv(SUBS / f)["target"].to_numpy() for f in files], axis=0)
@@ -72,5 +87,7 @@ if __name__ == "__main__":
     a = sys.argv[1:]
     if a[0] == "bag":
         write(*bag(a[1], a[2:]))
+    elif a[0] == "floorsplice":
+        write(*floor_splice(a[1], a[2]))
     else:
         write(*block_probe(a[0], a[1]))

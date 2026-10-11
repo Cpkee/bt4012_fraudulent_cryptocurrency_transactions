@@ -145,3 +145,19 @@ completely. Versus 0.96313 the reading is ≈ [n_f1·n_l2·(1 − A12) − n_f2�
 averaged with the 15-seed Final 1. Unreadable by construction (expected Spearman ≈ 0.999); uploaded so it can be
 selected as Final 1. Expected public score inside 0.9626–0.9632. If selected, `final_model*.ipynb` must be
 re-executed with `seeds=tuple(range(30))` (about twice the 15-seed run time).
+
+**Read 2026-10-11: `fam_bag15_post43floor` = 0.89203, −0.071 vs Final 1.** The post-43 block holds fraud, and Final 1
+ranks it above most pre-43 licit rows: that ordering is worth ≈ 0.07 of public AUC. Solving the floor identity with the
+model's pre-43 level (≈ 7%) gives ≈ 27–49 fraud rows among the ≈ 2,000 public post-43 rows (1.3–2.4%, depending on how
+well they already beat pre-43 licit rows), i.e. a real but low base rate: consistent with the within-step rank reading
+(lifting the whole block, 97% licit, lost 0.022). The within-block ordering term carries weight n_f2·n_l2/(n_f·n_l) ≈
+0.06–0.10, so a better post-43 ordering can be worth up to ≈ 0.01–0.02 on the public board, and the board's own noise on
+that term (≈ 35 positives) is ≈ 0.004: only large ordering changes are readable.
+
+Within the post-43 block every scored file orders the rows much like Final 1 (Spearman 0.84–0.96; most different:
+`sub_06` all-history 0.844, `sub_04` rank-normalised 0.845, `recent14_local` 0.853). The protocol
+(`src/post43_probes.py floorsplice <base> <candidate>`): pre-43 rows from Final 1, post-43 block floored with the
+candidate's order; the difference vs 0.89203 reads the candidate's within-block ranking quality alone. First candidate
+= `sub_06` (the broadest training distribution; the hypothesis is that the recent window, which wins pre-43, is not the
+best window for the shifted block). A positive reading would make the final file "Final 1 with the post-43 order
+replaced, mapped onto Final 1's post-43 value range" (the level stays, which the level probes showed is right).
