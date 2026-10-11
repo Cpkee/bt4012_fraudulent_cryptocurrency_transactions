@@ -118,3 +118,9 @@ last cheap lever that targets the 0.005 gap; if it fails, the public search is o
 finals stand (`fam_B15_nbfeat_all_bag15` + `fam_B15_Aoof_random_bag10`), the report takes the time,
 and one slot a day stays open for an information source from outside the 159 features and the
 labelled-only graph.
+
+**Read 2026-10-11: `fam_bag15_levelamp25` = 0.96165, −0.0015 vs Final 1: tie band, slightly negative.** The model
+uses the period level about right; the period-level axis is closed in both directions (erase −0.022, amplify −0.0015).
+`fam_bag15_levelamp50` is not uploaded. **The public search for this pipeline is over**: finals stand
+(`fam_B15_nbfeat_all_bag15` 0.96313 + `fam_B15_Aoof_random_bag10` 0.95970), the report takes the time to 2026-10-25,
+and one slot a day stays open for an information source from outside the 159 features and the labelled-only graph.

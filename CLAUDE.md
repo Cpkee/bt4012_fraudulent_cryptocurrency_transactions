@@ -131,6 +131,7 @@ slots is a day of lost information: there should always be readable candidates b
 | **fam_B15_nbfeat_all_bag15** | the 15-seed bag (seeds 0–14) of the all-159 model: **Final 1** | **0.9631** (2026-10-10) |
 | fam_B15_Aoof_random_bag10 | the 10-seed bag of the random-OOF two-stage: **Final 2** (ranks 0.964 like Final 1) | 0.9597 (2026-10-10) |
 | fam_bag15_steprank | Final 1 replaced by its within-step percentile rank (cross-period calibration question) | 0.9412 (−0.022: the period level is right; closed) |
+| fam_bag15_levelamp25 | Final 1 with each period's level amplified by 0.25 in log-odds (the mirror probe) | 0.9617 (−0.0015, tie band: the level is used about right; axis closed both ways) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
@@ -160,7 +161,8 @@ highest-scoring model plus a seed bag of the strongest file that ranks < 0.97 li
 - **The ordering between periods is worth 0.022 of public AUC** (2026-10-10: Final 1 with every score
   replaced by its within-step rank fell from 0.9631 to 0.9412). The model's low scores after step 43 are
   right as far as the board can tell: the collapse is a base-rate drop, not blindness, and any change
-  that flattens period levels will lose.
+  that flattens period levels will lose. Amplifying the level (×0.25 in log-odds) read −0.0015 (2026-10-11):
+  the model uses the period level about right; the axis is closed in both directions.
 
 ## Direction (current): continuous improvement
 
