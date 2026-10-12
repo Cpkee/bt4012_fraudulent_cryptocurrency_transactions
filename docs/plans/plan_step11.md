@@ -135,3 +135,10 @@ after the existing block (column-order discipline). **No upload slot is spent un
 calibration, displacing the weakly-motivated contingent `p43neg` full file; two gate failures close
 the axis for good at zero slot cost. Prior: low (the axis's record); the readable-gain bar vs
 0.96069 stays ±0.003.
+
+**Gated 2026-10-13: both fail — `scorew` 0.993, `top1` 0.992 vs `fam_B15_nbfeat`**, inside the same
+0.988–0.994 band as the five step-9 variants. Model B reaches the same test ranking whatever shape
+the one-hop neighbour information takes (plain means, score-weighted means, the argmax-neighbour's
+vector, max, delta, 2-hop, into-A). **The neighbour-feature axis is closed for good on the kind of
+information as well**; no slot spent. The 2026-10-13 schedule stands: slot 1 = floorrev calibration,
+slot 2 contingent on it.

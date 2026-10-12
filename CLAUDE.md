@@ -298,6 +298,14 @@ both ordered it worse. Slot 2 of 2026-10-13 is contingent on the calibration: if
 `B15_nbfeat_pseudo_p43neg` *full file* vs 0.96069 (passes the whole-file gate at 0.960; weakly motivated, sibling read
 −0.0052); if it closes, finals stand and report work resumes with one exploratory slot a day.
 
+**Step 11 round 2 (user-approved 2026-10-13, `plan_step11.md`): the neighbour-feature axis re-opened for the two
+untried kind-changes, gate-only.** `B15_nbfeat_scorew` (score-weighted neighbour feature means: the
+suspicious-neighbour profile, `two_stage(nb_feat_scorew=True)`) and `B15_nbfeat_top1` (the argmax-neighbour's raw
+features, `two_stage(nb_feat_top1=True)`). **Both failed the gate — 0.993 / 0.992 vs `fam_B15_nbfeat`, the same
+0.988–0.994 band as every step-9 variant.** Model B reaches the same test ranking whatever shape the one-hop
+neighbour information takes: **the axis is closed for good on amount, statistic, entry point, reach and kind**; no
+slot spent.
+
 ## Future implementation notes
 
 - Run scripts from anywhere as `.venv/bin/python src/families.py <name>` (also `src/probes.py`,
