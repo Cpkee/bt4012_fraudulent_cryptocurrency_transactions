@@ -77,3 +77,34 @@ on temporal choices; the pre-screen only decides which candidates get slots firs
   slot 3 `fam_post43floor_lowrate` (if gated in time).
 - Then one new donor per day through the floorsplice, ordered by the pre-screen; remaining
   slots for promotions of any winner and for the pseudo-pre43 axis if it opens.
+
+## Status after the 2026-10-12 readings (all three losses)
+
+| file | read | delta | meaning |
+|---|---|---|---|
+| fam_post43floor_sub06 | 0.88509 | −0.0069 | all-history orders the block *worse* than Final 1 (ΔA22 ≈ −0.07 to −0.12) |
+| fam_post43floor_lowrate | 0.87796 | −0.0141 | regime-matched orders it much worse (ΔA22 ≈ −0.14 to −0.23) |
+| fam_B15_nbfeat_pseudo_pre43 | 0.95553 | −0.0052 | transductive axis closed with a board reading |
+
+Final 1's own block order beats both motivated challengers. **The pre-screen is discredited as a
+ranker**: it predicted regime-matched ≫ all-history ≫ window and the board read the exact
+reverse — the low-rate-band gain was era proximity and sibling-step matching, not transferable
+regime knowledge. One more offline proxy wrong about a temporal question; recorded for the report.
+pseudo_pre43's within-block Spearman vs Final 1 is 0.936: its splice could never read; dropped.
+kNN and the zero-build splices lose their motivation with the pre-screen; held unless the
+calibration says the campaign continues and the pseudo-negatives donor also loses.
+
+## The calibration step (2026-10-13)
+
+- **Slot 1: `fam_bag15_post43floorrev`** (built, gated): Final 1's block order reversed under the
+  floor. Δ vs 0.89203 = −w·(2·A22−1), w ≈ 0.06–0.10 → **A22 = 0.5 − Δ/(2w)**, Final 1's absolute
+  within-block AUC. Worked examples: Δ = −0.022 → A22 ≈ 0.61–0.68; Δ = −0.045 → A22 ≈ 0.72–0.87;
+  Δ = −0.06 → A22 ≈ 0.80–0.95. Decision rule: A22 ≥ ~0.85 (Δ ≤ ≈ −0.055) → remaining headroom
+  ≲ 0.01 and both challengers already lost: **close the campaign for good**, finals stand, report
+  takes the time. A22 ≤ ~0.75 → real headroom remains; continue with mechanism-diverse donors.
+- **Slot 2: floorsplice of `B15_nbfeat_pseudo_p43neg`** (building 2026-10-12): confident-licit
+  post-43 rows (model-A score < 0.02) as pseudo-label-0 model-B training rows — the last donor
+  using untouched information (the post-43 rows' own features, negative side). CV is a no-op for
+  the flag (no CV step reaches 43), so its CV must equal the parent's ≈ 0.9689 (wiring check).
+  Readability check before upload: within-block Spearman vs Final 1 well below ~0.9.
+- Slot 3: held for the follow-up (a winner's promotion, or nothing).

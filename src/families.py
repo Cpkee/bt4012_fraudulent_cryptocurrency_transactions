@@ -84,6 +84,9 @@ BOARD = {
     "fam_bag15_levelamp25.csv": 0.96165,
     "fam_bag15_post43floor.csv": 0.89203,
     "fam_B15_nbfeat_all_bag30.csv": 0.96307,
+    "fam_B15_nbfeat_pseudo_pre43.csv": 0.95553,
+    "fam_post43floor_sub06.csv": 0.88509,
+    "fam_post43floor_lowrate.csv": 0.87796,
 }
 
 
@@ -182,7 +185,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
               nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_gnn_embed: bool = False,
-              nb_comm: bool = False, b_pseudo_pre43: int = 0):
+              nb_comm: bool = False, b_pseudo_pre43: int = 0, b_pseudo_post43_neg: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -496,6 +499,15 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             keep_p = early & ((pA_va > 0.9) | (pA_va < 0.02))
             A = pd.concat([A, B[keep_p]], ignore_index=True); yB = np.r_[yB, (pA_va[keep_p] > 0.5).astype(int)]
             tB = np.r_[tB, ts_va[keep_p]]; wB = None if wB is None else np.r_[wB, np.ones(keep_p.sum())]
+        if b_pseudo_post43_neg:
+            # step 11 (plan_step11.md, 2026-10-13): the confidently licit-scored post-43 rows join model B's
+            # training set as pseudo-label-0 rows (their model-B columns are the ones already built in B),
+            # teaching model B what post-43 licit looks like so the block's residual order sharpens. In CV
+            # no validation step reaches 43, so the flag is a no-op there (CV = the parent's CV). Read
+            # through the floorsplice only (the full file perturbs model B too little to pass the gate).
+            keep_n = (ts_va >= 43) & (pA_va < 0.02)
+            A = pd.concat([A, B[keep_n]], ignore_index=True); yB = np.r_[yB, np.zeros(int(keep_n.sum()), int)]
+            tB = np.r_[tB, ts_va[keep_n]]; wB = None if wB is None else np.r_[wB, np.ones(keep_n.sum())]
         mB = fit_B(A, yB, tB, wB, seed)
         pB = mB.predict(B) if b_rank else mB.predict_proba(B.fillna(-1) if b_learner == "et" else B)[:, 1]
         if b_rank:
@@ -698,6 +710,8 @@ FAMILIES = {
     # step 10 (docs/plans/plan_step10.md, Lecture 8 SNA): the community as the neighbourhood unit
     "B15_nbfeat_comm": ("B15 two-stage, random OOF, top-10 neighbour feature means + mean/max/count of model-A scores over the other scored rows of the row's Louvain community (3 model-B columns), bagged x5", "clean",
                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_comm=True), BAG5),
+    "B15_nbfeat_pseudo_p43neg": ("B15 two-stage, random OOF, top-10 neighbour feature means, + the confidently licit-scored post-43 test rows as pseudo-label-0 model-B training rows (transductive negatives; CV is a no-op for the flag; post-43 splice donor), bagged x5", "clean",
+                                 two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_pseudo_post43_neg=True), BAG5),
     # step 11 (docs/plans/plan_step11.md): post-43 splice donors. Not direct upload candidates
     # (a low-rate trainer has no high-rate competence, so the CV sanity gate does not apply);
     # only their post-43 block order is read, through post43_probes.py floorsplice.

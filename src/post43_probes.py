@@ -42,12 +42,21 @@ def block_probe(kind: str, key: str):
         q = np.where(post, r * 1e-3, r)                  # whole block below every pre-43 row, order kept
     elif kind == "ceiling":
         q = np.where(post, 0.5 + r / 2, r / 2)           # whole block above every pre-43 row, order kept
+    elif kind == "floorrev":
+        # block below every pre-43 row with its internal order REVERSED: vs the floor file the
+        # reading is -w*(2*A22 - 1), w ~ 0.06-0.10 -> Final 1's absolute within-block AUC A22
+        q = np.where(post, (rankdata(-s["target"]) / len(s)) * 1e-3, r)
     else:
         raise ValueError(kind)
     name = f"bag15_post43{kind}" if "bag15" in f else f"{key.replace('fam_', '')}_post43{kind}"
-    desc = (f"{f.split('.')[0]} with the post-43 block (steps {SPLIT}-49, {post.mean():.1%} of rows) ranked "
-            f"{'below' if kind == 'floor' else 'above'} every pre-43 row, order inside each block kept: "
-            f"reads how much rankable fraud the post-43 block holds")
+    if kind == "floorrev":
+        desc = (f"{f.split('.')[0]} with the post-43 block ranked below every pre-43 row and its internal order "
+                f"reversed: vs fam_bag15_post43floor (0.89203) the difference is -w*(2*A22-1), w ~ 0.06-0.10, "
+                f"a direct reading of Final 1's absolute within-block ordering quality A22")
+    else:
+        desc = (f"{f.split('.')[0]} with the post-43 block (steps {SPLIT}-49, {post.mean():.1%} of rows) ranked "
+                f"{'below' if kind == 'floor' else 'above'} every pre-43 row, order inside each block kept: "
+                f"reads how much rankable fraud the post-43 block holds")
     return name, q, desc
 
 

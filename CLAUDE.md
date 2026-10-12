@@ -134,6 +134,9 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_bag15_levelamp25 | Final 1 with each period's level amplified by 0.25 in log-odds (the mirror probe) | 0.9617 (−0.0015, tie band: the level is used about right; axis closed both ways) |
 | fam_bag15_post43floor | Final 1 with the post-43 block ranked below every pre-43 row (information probe) | 0.8920 (−0.071: the block holds ≈ 1.3–2.4% fraud that Final 1 ranks above most pre-43 licit rows) |
 | fam_B15_nbfeat_all_bag30 | the 30-seed bag (seeds 0–29) of the all-159 model | 0.9631 (= bag15: seed variance flat from 15 seeds; Final 1 stays bag15) |
+| fam_B15_nbfeat_pseudo_pre43 | confident test rows of steps 36–42 as pseudo-labelled model-B training rows | 0.9555 (−0.0052: transductive axis closed) |
+| fam_post43floor_sub06 | floorsplice: Final 1's pre-43, sub_06's post-43 block order | 0.8851 (−0.0069 vs the floor: all-history orders the block worse) |
+| fam_post43floor_lowrate | floorsplice: the regime-matched (low-rate steps) block order | 0.8780 (−0.0141: much worse; the offline pre-screen misranked both donors) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
@@ -277,6 +280,18 @@ Final 1's pre-43 rows; within-block Spearman **0.687** vs Final 1, the most diff
 vs 0.89203: ≥ +0.005 → promote to the mapped full candidate; ≤ −0.005 → next donor; between → unreadable, next donor.
 Next donors in order (plan_step11.md): post-43 confident-licit pseudo-negatives, pseudo_pre43's block order, zero-build
 splices (sub_04, recent14_local). Exit: three losses/ties from different mechanism families closes the campaign.
+
+**Read 2026-10-12 (all three slots): `fam_post43floor_sub06` 0.88509 (−0.0069), `fam_post43floor_lowrate` 0.87796
+(−0.0141), `fam_B15_nbfeat_pseudo_pre43` 0.95553 (−0.0052).** All losses. Final 1's own block order beats both motivated
+challengers — more history and regime-matched training each order the block *worse* — and the transductive axis is
+closed. The offline pre-screen misranked the two donors even relative to each other (it had regime-matched ≫
+all-history; the board read the reverse): **discredited as a ranker for temporal questions, like every offline proxy
+before it.** pseudo_pre43's block order is 0.936 like Final 1 (never readable; dropped). The open question is now
+calibration: Final 1's *absolute* within-block AUC. **Slot 1 of 2026-10-13 = `fam_bag15_post43floorrev`** (Final 1's
+block order reversed under the floor; built, gated): Δ vs 0.89203 = −w·(2·A22−1), w ≈ 0.06–0.10, so A22 = 0.5 − Δ/(2w).
+A22 ≥ ~0.85 → headroom < ~0.01, the campaign closes with evidence; A22 low → it continues. **Slot 2 = the floorsplice of
+`B15_nbfeat_pseudo_p43neg`** (confident-licit post-43 rows as pseudo-label-0 model-B rows, `two_stage(b_pseudo_post43_neg=True)`,
+the last donor with untouched information — the post-43 rows' own features on the negative side; building 2026-10-12).
 
 ## Future implementation notes
 
