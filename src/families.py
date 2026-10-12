@@ -170,7 +170,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
               nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_gnn_embed: bool = False,
-              nb_comm: bool = False):
+              nb_comm: bool = False, b_pseudo_pre43: int = 0):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -472,6 +472,18 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             if b_stack_logreg: AU = AU.assign(lr_score=lr().fit(Xw, yw).predict_proba(XU[keep_u])[:, 1])
             A = pd.concat([A, AU[A.columns]], ignore_index=True); yB = np.r_[yB, (pu[keep_u] > 0.5).astype(int)]
             tB = np.r_[tB, U_ts[m_u][keep_u]]; wB = None if wB is None else np.r_[wB, np.ones(keep_u.sum())]
+        if b_pseudo_pre43:
+            # step 10 (plan_step10.md, 2026-10-12): the rows to predict from the first `b_pseudo_pre43` steps of
+            # the prediction period (test: 36-42, where the model's ordering is good and both classes are
+            # confidently predicted) join model B's training set with hard pseudo-labels from model A when it is
+            # confident (> 0.9 or < 0.02). Transductive: their features only, never a label. Their model-B
+            # columns are the ones already built for them (B), so column order is untouched. The recency
+            # principle pushed to its limit: training rows from inside the test period. Post-43 rows are
+            # never pseudo-labelled (their confident predictions are all licit: plan_step8 diagnostics).
+            early = ts_va <= ts_va.min() + (b_pseudo_pre43 - 1)
+            keep_p = early & ((pA_va > 0.9) | (pA_va < 0.02))
+            A = pd.concat([A, B[keep_p]], ignore_index=True); yB = np.r_[yB, (pA_va[keep_p] > 0.5).astype(int)]
+            tB = np.r_[tB, ts_va[keep_p]]; wB = None if wB is None else np.r_[wB, np.ones(keep_p.sum())]
         mB = fit_B(A, yB, tB, wB, seed)
         pB = mB.predict(B) if b_rank else mB.predict_proba(B.fillna(-1) if b_learner == "et" else B)[:, 1]
         if b_rank:
@@ -659,6 +671,8 @@ FAMILIES = {
     # step 10 (docs/plans/plan_step10.md): variance reduction for the finals — more seeds of the two finals models
     "B15_nbfeat_all_seedsC": ("B15 two-stage, random OOF, means of all 159 features over labelled neighbours, seeds 10-14 (third 5-seed bag for the 15-seed finals file)", "clean",
                               two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), (10, 11, 12, 13, 14)),
+    "B15_nbfeat_pseudo_pre43": ("B15 two-stage, random OOF, top-10 neighbour feature means, + the confidently scored test rows of steps 36-42 as pseudo-labelled model-B training rows (transductive; post-43 rows never pseudo-labelled), bagged x5", "clean",
+                                two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_pseudo_pre43=7), BAG5),
     "B15_nbfeat_all_seedsD": ("B15 two-stage, random OOF, means of all 159 features over labelled neighbours, seeds 15-29 (15 more seeds for the 30-seed finals file)", "clean",
                               two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), tuple(range(15, 30))),
     "B15_Aoof_random_seedsB": ("B15 two-stage with random 5-fold OOF scoring, seeds 5-9 (second 5-seed bag for the 10-seed Final 2)", "clean",
