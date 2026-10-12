@@ -262,6 +262,22 @@ candidate's order; difference vs 0.89203 = the candidate's within-block quality)
 like Final 1; first candidate `sub_06` (all-history, 0.844) is built (`fam_post43floor_sub06`). A candidate that reads positive
 becomes "Final 1 with its post-43 order, mapped onto Final 1's post-43 value range" (the level stays: the level probes say it is right).
 
+**Step 11 (2026-10-12, user-approved: all 3 slots/day this week; `docs/plans/plan_step11.md`): the post-43 ordering
+campaign.** Measured: the only training steps with a post-43-like fraud rate (< 3%) are **1–6 and 10** (9,322 labelled
+rows, 107 positives; < 5% adds 12 and 23, 176 positives) — the recent-14 window contains no low-rate regime at all.
+Offline pre-screen (`src/post43_prescreen.py`, approved as a ranker only; low-rate band E = steps 1–6, 10 as the in-data
+analogue of the block): the win14 model orders E at pooled AUC **0.810**, all-history 0.96–0.97, and a 7-leaf LightGBM
+trained on the low-rate steps (leave-one-step-out) **0.992** with a very different order (Spearman 0.37–0.50 vs win14);
+kNN fraud-similarity 0.73 (deprioritised). Era-control (train on early high-rate steps 7–9, 11): 0.93–0.95, so part of
+the gain is era proximity that cannot transfer to post-43, but the rate-matching increment (+0.04–0.06) and the ranking
+regime-matched > all-history > window survive. Built: **`fam_lowrate`** (7 leaves, steps 1–6, 10, 12, 23, bagged ×10;
+splice donor only, CV sanity gate does not apply) and **`fam_post43floor_lowrate`** (its block order spliced under
+Final 1's pre-43 rows; within-block Spearman **0.687** vs Final 1, the most different order yet). Slots of 2026-10-12:
+1 = `fam_post43floor_sub06`, 2 = `fam_B15_nbfeat_pseudo_pre43`, 3 = `fam_post43floor_lowrate`. Reading rule for splices
+vs 0.89203: ≥ +0.005 → promote to the mapped full candidate; ≤ −0.005 → next donor; between → unreadable, next donor.
+Next donors in order (plan_step11.md): post-43 confident-licit pseudo-negatives, pseudo_pre43's block order, zero-build
+splices (sub_04, recent14_local). Exit: three losses/ties from different mechanism families closes the campaign.
+
 ## Future implementation notes
 
 - Run scripts from anywhere as `.venv/bin/python src/families.py <name>` (also `src/probes.py`,
@@ -301,7 +317,8 @@ becomes "Final 1 with its post-43 order, mapped onto Final 1's post-43 value ran
 | `notebooks/main.ipynb` | experiment notebook, sections 5–16 (steps 1–3), executed; its first code cell moves the kernel to the repo root and puts `src/` on the path. Steps 5–6 live in `src/families.py` + ledger |
 | `docs/results.md` | ledger of every file with CV and public score |
 | `docs/report_notes.md` | methodology and results write-up with every table; `docs/figures/` diagrams |
-| `docs/plans/plan_step1..10.md`, `plan_step10_sna.md` | step plans (`plan_step10.md` = the current round: variance, finals, report; `plan_step10_sna.md` = the Lecture 8 SNA mapping, homophily and community diagnostics, closed 2026-10-09) |
+| `docs/plans/plan_step1..11.md`, `plan_step10_sna.md` | step plans (`plan_step11.md` = the current round: the post-43 ordering campaign, floorsplice donors, pre-screen protocol; `plan_step10_sna.md` = the Lecture 8 SNA mapping, closed 2026-10-09) |
+| `src/post43_probes.py`, `src/post43_prescreen.py` | post-43 block probes (floor / ceiling / floorsplice / bag) and the offline low-rate-band pre-screen (ranker only) |
 | `docs/instructions.md` | competition reference |
 | `submissions/`, `artifacts/` | (gitignored) every CSV; CV tables, caches and `family_*.json` |
 | `AGENTS.md` | pointer to this file for other agents |

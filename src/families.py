@@ -117,6 +117,18 @@ def lgbm_recent(last_k: int, params: dict | None = None, n_estimators: int = 300
     return fit_predict
 
 
+def lgbm_steps(steps: tuple, params: dict | None = None, n_estimators: int = 300):
+    """sub_06 recipe trained only on the listed time steps (step 11, plan_step11.md: the
+    regime-matched post-43 splice donor trains on the low-fraud-rate steps, which the recency
+    window excludes entirely). Steps outside the training window a CV fold provides are
+    silently absent from that fold's fit."""
+    base = {**LGBM_PARAMS, **(params or {}), "n_estimators": n_estimators}
+    def fit_predict(Xtr, ytr, Xva, seed=0):
+        keep = np.isin(_TS[Xtr.index.to_numpy()], steps)
+        return lgb.LGBMClassifier(**{**base, "random_state": seed}).fit(Xtr[keep], np.asarray(ytr)[keep]).predict_proba(Xva)[:, 1]
+    return fit_predict
+
+
 def lgbm_recency_weighted(half_life: float, params: dict | None = None, n_estimators: int = 300):
     """sub_06 recipe with exponential sample weights 0.5 ** ((t_last - t) / half_life)."""
     base = {**LGBM_PARAMS, **(params or {}), "n_estimators": n_estimators}
@@ -686,6 +698,11 @@ FAMILIES = {
     # step 10 (docs/plans/plan_step10.md, Lecture 8 SNA): the community as the neighbourhood unit
     "B15_nbfeat_comm": ("B15 two-stage, random OOF, top-10 neighbour feature means + mean/max/count of model-A scores over the other scored rows of the row's Louvain community (3 model-B columns), bagged x5", "clean",
                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_comm=True), BAG5),
+    # step 11 (docs/plans/plan_step11.md): post-43 splice donors. Not direct upload candidates
+    # (a low-rate trainer has no high-rate competence, so the CV sanity gate does not apply);
+    # only their post-43 block order is read, through post43_probes.py floorsplice.
+    "lowrate": ("post-43 splice donor: 7-leaf LightGBM (lr 0.05, 300 rounds) trained on the low-fraud-rate steps only (1-6, 10, 12, 23: 176 positives, 0.4-4.5% per step, the regime most like post-43), bagged x10", "clean",
+                lgbm_steps((1, 2, 3, 4, 5, 6, 10, 12, 23), {"num_leaves": 7, "min_child_samples": 20, "colsample_bytree": 0.6, "subsample": 1.0, "subsample_freq": 1, "reg_lambda": 1.0, "reg_alpha": 0.0, "learning_rate": 0.05}), tuple(range(10))),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),

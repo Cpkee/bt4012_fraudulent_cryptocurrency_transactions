@@ -60,9 +60,14 @@ def floor_splice(base_key: str, cand_key: str):
     post = ts >= SPLIT
     rb = rankdata(sb["target"]) / len(sb); rc = rankdata(sc["target"]) / len(sc)
     q = np.where(post, rc * 1e-3, rb)
+    from scipy.stats import spearmanr
+    rho_blk = spearmanr(sb["target"][post], sc["target"][post]).correlation
+    print(f"  within-post-43-block Spearman of {fc.split('.')[0]} vs {fb.split('.')[0]}: {rho_blk:.3f} "
+          f"(readable only if the orders differ substantially; the whole-file gate does not apply)")
     name = f"post43floor_{cand_key.replace('fam_', '').replace('sub_', 'sub')}"
     desc = (f"post-43 floor protocol: pre-43 rows = {fb.split('.')[0]} (Final 1), post-43 block ranked below them with the "
-            f"block order of {fc.split('.')[0]}; vs fam_bag15_post43floor (0.89203) reads that file's within-post-43 ranking quality")
+            f"block order of {fc.split('.')[0]} (within-block Spearman {rho_blk:.3f} vs the base); "
+            f"vs fam_bag15_post43floor (0.89203) reads that file's within-post-43 ranking quality")
     return name, q, desc
 
 
