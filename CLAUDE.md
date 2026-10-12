@@ -289,9 +289,14 @@ all-history; the board read the reverse): **discredited as a ranker for temporal
 before it.** pseudo_pre43's block order is 0.936 like Final 1 (never readable; dropped). The open question is now
 calibration: Final 1's *absolute* within-block AUC. **Slot 1 of 2026-10-13 = `fam_bag15_post43floorrev`** (Final 1's
 block order reversed under the floor; built, gated): Δ vs 0.89203 = −w·(2·A22−1), w ≈ 0.06–0.10, so A22 = 0.5 − Δ/(2w).
-A22 ≥ ~0.85 → headroom < ~0.01, the campaign closes with evidence; A22 low → it continues. **Slot 2 = the floorsplice of
-`B15_nbfeat_pseudo_p43neg`** (confident-licit post-43 rows as pseudo-label-0 model-B rows, `two_stage(b_pseudo_post43_neg=True)`,
-the last donor with untouched information — the post-43 rows' own features on the negative side; building 2026-10-12).
+A22 ≥ ~0.85 → headroom < ~0.01, the campaign closes with evidence; A22 low → it continues. The pseudo-negatives donor
+`B15_nbfeat_pseudo_p43neg` (`two_stage(b_pseudo_post43_neg=True)`) was built 2026-10-12: CV = the parent's exactly
+(wiring check), but its within-block Spearman is **0.926** vs Final 1 — the splice is unreadable and dropped. The pattern
+is now measured three ways: **every variant of the current pipeline orders the block essentially like Final 1**
+(pseudo_pre43 0.936, p43neg 0.926, scored files 0.84–0.96); only outside models differ (sub_06 0.844, lowrate 0.687) and
+both ordered it worse. Slot 2 of 2026-10-13 is contingent on the calibration: if the campaign continues, the
+`B15_nbfeat_pseudo_p43neg` *full file* vs 0.96069 (passes the whole-file gate at 0.960; weakly motivated, sibling read
+−0.0052); if it closes, finals stand and report work resumes with one exploratory slot a day.
 
 ## Future implementation notes
 

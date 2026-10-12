@@ -102,9 +102,16 @@ calibration says the campaign continues and the pseudo-negatives donor also lose
   Δ = −0.06 → A22 ≈ 0.80–0.95. Decision rule: A22 ≥ ~0.85 (Δ ≤ ≈ −0.055) → remaining headroom
   ≲ 0.01 and both challengers already lost: **close the campaign for good**, finals stand, report
   takes the time. A22 ≤ ~0.75 → real headroom remains; continue with mechanism-diverse donors.
-- **Slot 2: floorsplice of `B15_nbfeat_pseudo_p43neg`** (building 2026-10-12): confident-licit
-  post-43 rows (model-A score < 0.02) as pseudo-label-0 model-B training rows — the last donor
-  using untouched information (the post-43 rows' own features, negative side). CV is a no-op for
-  the flag (no CV step reaches 43), so its CV must equal the parent's ≈ 0.9689 (wiring check).
-  Readability check before upload: within-block Spearman vs Final 1 well below ~0.9.
+- ~~Slot 2: floorsplice of `B15_nbfeat_pseudo_p43neg`~~ **built 2026-10-12 and dropped**: CV =
+  the parent's exactly (wiring check passed), but the within-block Spearman is **0.926** vs
+  Final 1 — the pseudo-negatives reshuffle the full file (0.937) yet barely reorder the block,
+  so the splice can never clear the noise floor. Pattern now measured three times (pseudo_pre43
+  0.936, p43neg 0.926, every scored file 0.84–0.96): **every variant of the current pipeline
+  orders the block essentially like Final 1**; only models from outside the pipeline (sub_06
+  0.844, lowrate 0.687) differ, and both ordered it worse.
+- **Slot 2 (contingent on the calibration): the `B15_nbfeat_pseudo_p43neg` full file** vs
+  0.96069 — it passes the whole-file gate (0.960) and is the one untested mechanism left, but
+  weakly motivated (its sibling pseudo_pre43 read −0.0052). Upload only if floorrev says the
+  campaign continues; if the campaign closes, hold it and return to report work with one
+  exploratory slot a day as before.
 - Slot 3: held for the follow-up (a winner's promotion, or nothing).
