@@ -115,3 +115,23 @@ calibration says the campaign continues and the pseudo-negatives donor also lose
   campaign continues; if the campaign closes, hold it and return to report work with one
   exploratory slot a day as before.
 - Slot 3: held for the follow-up (a winner's promotion, or nothing).
+
+## Round 2 (user-approved 2026-10-13): two kind-changes on the neighbour-feature axis, gate-only
+
+The axis was closed at step 9 on amount, statistic, entry point and reach (five unreadable gates;
+one tie-band gain in seven attempts since the +0.0022 adoption). The user re-opened it for the two
+variants that change the *kind* of information — the only move that ever worked on this axis:
+
+1. **`B15_nbfeat_scorew`** (`two_stage(nb_feat_scorew=True)`): score-weighted neighbour feature
+   means, sum(s_j·x_j)/sum(s_j) with s_j = the neighbour's model-A score — the suspicious-neighbour
+   profile, coupling the two proven information sources into a ratio of sums the trees cannot form.
+2. **`B15_nbfeat_top1`** (`two_stage(nb_feat_top1=True)`): the raw features of the single
+   highest-scoring in- and out-neighbour — a selection, not an aggregate (per-feature max was
+   unreadable; the argmax-neighbour's vector was never tried).
+
+Both are one change each on the 0.96069 reference (nb_feats=10), 20 extra model-B columns appended
+after the existing block (column-order discipline). **No upload slot is spent unless a gate passes**
+(Spearman < 0.98 vs every scored file). A pass takes slot 2 of 2026-10-13 behind the floorrev
+calibration, displacing the weakly-motivated contingent `p43neg` full file; two gate failures close
+the axis for good at zero slot cost. Prior: low (the axis's record); the readable-gain bar vs
+0.96069 stays ±0.003.

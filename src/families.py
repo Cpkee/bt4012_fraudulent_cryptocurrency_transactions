@@ -185,7 +185,8 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
               nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_gnn_embed: bool = False,
-              nb_comm: bool = False, b_pseudo_pre43: int = 0, b_pseudo_post43_neg: bool = False):
+              nb_comm: bool = False, b_pseudo_pre43: int = 0, b_pseudo_post43_neg: bool = False,
+              nb_feat_scorew: bool = False, nb_feat_top1: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -257,6 +258,35 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             g = vals.reindex(src).set_axis(dst.to_numpy()).groupby(level=0)
             for stat in nb_feat_stats:                      # "mean" (default), optionally "max" / "min" / "std"
                 parts.append(g.agg(stat).reindex(tx_rows).add_prefix(f"nbf_{side}_{stat}_"))
+        return pd.concat(parts, axis=1).reset_index(drop=True)
+
+    def feat_agg_scorew(tx_rows: np.ndarray, sc: pd.Series, vals: pd.DataFrame) -> pd.DataFrame:
+        """Step 11 (plan_step11.md, 2026-10-13): score-weighted mean of `vals` over predecessors and
+        successors, weights = the neighbour's model-A score: sum(s_j * x_j) / sum(s_j). Answers
+        "what do the *suspicious* neighbours look like" where the unweighted mean answers "what do
+        neighbours look like" — a ratio of sums over a variable neighbour set, which the trees
+        cannot form from the existing columns. Same labelled-only neighbour set as everything else."""
+        e = edges[edges.txId1.isin(sc.index) & edges.txId2.isin(sc.index)]
+        parts = []
+        for side, src, dst in (("in", e.txId1, e.txId2), ("out", e.txId2, e.txId1)):
+            w = sc.reindex(src).to_numpy()
+            num = pd.DataFrame(vals.reindex(src).to_numpy() * w[:, None], columns=vals.columns,
+                               index=dst.to_numpy()).groupby(level=0).sum()
+            den = pd.Series(w, index=dst.to_numpy()).groupby(level=0).sum().replace(0, np.nan)
+            parts.append(num.div(den, axis=0).reindex(tx_rows).add_prefix(f"nbf_{side}_wmean_"))
+        return pd.concat(parts, axis=1).reset_index(drop=True)
+
+    def feat_agg_top1(tx_rows: np.ndarray, sc: pd.Series, vals: pd.DataFrame) -> pd.DataFrame:
+        """Step 11: the raw features of the single highest-scoring predecessor and successor (the
+        most suspicious neighbour's profile). A selection, not an aggregate: per-feature max was
+        unreadable, the argmax-neighbour's vector was never tried. Ties break deterministically."""
+        e = edges[edges.txId1.isin(sc.index) & edges.txId2.isin(sc.index)]
+        parts = []
+        for side, src, dst in (("in", e.txId1, e.txId2), ("out", e.txId2, e.txId1)):
+            df = pd.DataFrame({"dst": dst.to_numpy(), "s": sc.reindex(src).to_numpy(), "src": src.to_numpy()})
+            best = df.sort_values("s", kind="stable").groupby("dst").src.last()
+            prof = vals.reindex(best.to_numpy()).set_axis(best.index)
+            parts.append(prof.reindex(tx_rows).add_prefix(f"nbf_{side}_top1_"))
         return pd.concat(parts, axis=1).reset_index(drop=True)
 
     def fit_B(A_df, y_win, t_win, w, seed):
@@ -408,6 +438,12 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
                     for c in nbf:
                         Ftr[f"nbf_{side}_delta_{c}"] = Xtr[c].to_numpy() - Ftr[f"nbf_{side}_mean_{c}"].to_numpy()
                         Fva[f"nbf_{side}_delta_{c}"] = Xva[c].to_numpy() - Fva[f"nbf_{side}_mean_{c}"].to_numpy()
+            if nb_feat_scorew:
+                Ftr = pd.concat([Ftr, feat_agg_scorew(tx_tr, sc_tr, vals_tr)], axis=1)
+                Fva = pd.concat([Fva, feat_agg_scorew(tx_va, sc_va, vals_va)], axis=1)
+            if nb_feat_top1:
+                Ftr = pd.concat([Ftr, feat_agg_top1(tx_tr, sc_tr, vals_tr)], axis=1)
+                Fva = pd.concat([Fva, feat_agg_top1(tx_va, sc_va, vals_va)], axis=1)
         if nb_comm:
             comm = communities(edges, pd.concat([d.train.set_index("txId")["time_step"], d.test.set_index("txId")["time_step"]]))
 
@@ -710,6 +746,12 @@ FAMILIES = {
     # step 10 (docs/plans/plan_step10.md, Lecture 8 SNA): the community as the neighbourhood unit
     "B15_nbfeat_comm": ("B15 two-stage, random OOF, top-10 neighbour feature means + mean/max/count of model-A scores over the other scored rows of the row's Louvain community (3 model-B columns), bagged x5", "clean",
                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_comm=True), BAG5),
+    # step 11, round 2 (user-approved 2026-10-13): two kind-changes on the closed neighbour-feature
+    # axis, gate-only (a pass takes slot 2 behind the floorrev calibration; failures close the axis)
+    "B15_nbfeat_scorew": ("B15 two-stage, random OOF, top-10 neighbour feature means + their score-weighted means (each neighbour's features weighted by its model-A score: the suspicious-neighbour profile, 20 extra model-B columns), bagged x5", "clean",
+                          two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_scorew=True), BAG5),
+    "B15_nbfeat_top1": ("B15 two-stage, random OOF, top-10 neighbour feature means + the raw features of the single highest-scoring in- and out-neighbour (the most suspicious neighbour's profile, 20 extra model-B columns), bagged x5", "clean",
+                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_top1=True), BAG5),
     "B15_nbfeat_pseudo_p43neg": ("B15 two-stage, random OOF, top-10 neighbour feature means, + the confidently licit-scored post-43 test rows as pseudo-label-0 model-B training rows (transductive negatives; CV is a no-op for the flag; post-43 splice donor), bagged x5", "clean",
                                  two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_pseudo_post43_neg=True), BAG5),
     # step 11 (docs/plans/plan_step11.md): post-43 splice donors. Not direct upload candidates
