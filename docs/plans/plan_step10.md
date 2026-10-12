@@ -165,3 +165,19 @@ replaced, mapped onto Final 1's post-43 value range" (the level stays, which the
 **Read 2026-10-11: `fam_B15_nbfeat_all_bag30` = 0.96307** (bag15 0.96313): the 30-seed bag is identical to the 15-seed bag
 on the public board. Seed variance is flat from 15 seeds on; the axis is closed. Final 1 stays `fam_B15_nbfeat_all_bag15`
 (the notebooks already reproduce it exactly); bag30 is on the board as a selectable equivalent and nothing more.
+
+## 2026-10-12: the transductive candidate — `B15_nbfeat_pseudo_pre43`
+
+The one information source never used: the test rows' own features from steps 36–42. `two_stage(b_pseudo_pre43=7)`:
+test rows of the first 7 test steps whose model-A score is confident (> 0.9 or < 0.02) join model B's training set with
+hard pseudo-labels (8,210 rows, 6.2% pseudo-fraud, on top of the 11,705 labelled window rows; single-seed dry run).
+Post-43 rows are never pseudo-labelled (their confident predictions are all licit). The recency principle pushed to its
+limit; the earlier pseudo-label file (`B15_pseudo_unlab`, −0.006) used unlabelled rows of the old window and added no recency.
+
+| file | CV 3-fold | hard | horizon | PR | Spearman vs reference | verdict |
+|---|---|---|---|---|---|---|
+| fam_B15_nbfeat_pseudo_pre43.csv | 0.9635 | 0.8968 | 0.8067 | 0.9089 | 0.959 (`fam_B15_nbfeat`) | passes the gate: slot 2 of 2026-10-12 |
+
+CV below the reference (0.9689), as for every recency / neighbour gain so far; above the 0.95 floor. Reading rule vs
+0.96069: ≥ +0.003 gain → the transductive axis opens (map the step count 36–38 / 36–42, the thresholds, and the same
+rows into model A's window); ≤ −0.003 loss → closed with a board reading; between → tie, the simpler file wins.
