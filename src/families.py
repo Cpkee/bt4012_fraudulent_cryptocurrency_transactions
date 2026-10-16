@@ -87,6 +87,18 @@ BOARD = {
     "fam_B15_nbfeat_pseudo_pre43.csv": 0.95553,
     "fam_post43floor_sub06.csv": 0.88509,
     "fam_post43floor_lowrate.csv": 0.87796,
+    "fam_B15_nbfeat_all_goof.csv": 0.96209,
+    "fam_B15_nbfeat_all_goof_bag15.csv": 0.96310,
+    "fam_bag15_post43floorrev.csv": 0.83841,
+    "fam_B15_nbfeat_all_combo.csv": 0.96362,
+    "fam_B15_nbfeat_combo.csv": 0.95948,
+    "fam_B15_nbfeat_all_combo_bag15.csv": 0.96316,
+    "fam_B15_nbfeat_all_soof.csv": 0.96319,
+    "fam_B15_nbfeat_all_soof_bag15.csv": 0.96290,
+    "fam_B15_nbfeat_all_goof_blocks.csv": 0.96382,
+    "fam_B15_nbfeat_all_goof_blocks_bag15.csv": 0.96385,
+    "fam_blend_goof_blocks_bag15.csv": 0.96539,
+    "fam_B15_nbfeat_all_goof_xgb.csv": 0.96189,
 }
 
 
@@ -186,7 +198,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
               nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_gnn_embed: bool = False,
               nb_comm: bool = False, b_pseudo_pre43: int = 0, b_pseudo_post43_neg: bool = False,
-              nb_feat_scorew: bool = False, nb_feat_top1: bool = False):
+              nb_feat_scorew: bool = False, nb_feat_top1: bool = False, nb_extra_k: int = 0, nb_extra_stats: tuple = (), b_blocks: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -249,14 +261,14 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
     # where there is no neighbour). CV-rejected on the single-stage in step 1; never board-read.
     IMP_ORDER = list(pd.read_csv(ARTIFACTS / "lgbm_importance_raw_1to28.csv", index_col=0).index) if nb_feats else []
 
-    def feat_agg(tx_rows: np.ndarray, sc_index: pd.Index, vals: pd.DataFrame) -> pd.DataFrame:
+    def feat_agg(tx_rows: np.ndarray, sc_index: pd.Index, vals: pd.DataFrame, stats: tuple | None = None) -> pd.DataFrame:
         """Mean of `vals` (indexed by txId) over predecessors and successors of tx_rows, edges
         restricted to nodes in `sc_index`."""
         e = edges[edges.txId1.isin(sc_index) & edges.txId2.isin(sc_index)]
         parts = []
         for side, src, dst in (("in", e.txId1, e.txId2), ("out", e.txId2, e.txId1)):
             g = vals.reindex(src).set_axis(dst.to_numpy()).groupby(level=0)
-            for stat in nb_feat_stats:                      # "mean" (default), optionally "max" / "min" / "std"
+            for stat in (stats or nb_feat_stats):           # "mean" (default), optionally "max" / "min" / "std"
                 parts.append(g.agg(stat).reindex(tx_rows).add_prefix(f"nbf_{side}_{stat}_"))
         return pd.concat(parts, axis=1).reset_index(drop=True)
 
@@ -359,22 +371,43 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             assert nb_feats and not (unlab or b_pseudo_unlab or a_extra_hist), "nb_feats_into_A: unsupported combination"
             _tx_tr = L_tx[Xtr.index.to_numpy()]
             _tx_va = T_tx[Xva.index.to_numpy()] if _PHASE == "final" else L_tx[Xva.index.to_numpy()]
-            _nbf = [c for c in IMP_ORDER if c in Xtr.columns][:nb_feats]
+            _nbf = [c for c in IMP_ORDER if c in Xtr.columns][:nb_extra_k or nb_feats]
             _v_tr = pd.DataFrame(Xtr[_nbf].to_numpy(), index=_tx_tr, columns=_nbf)[win]
             _v_va = pd.DataFrame(Xva[_nbf].to_numpy(), index=_tx_va, columns=_nbf)
             Xa_tr = pd.concat([Xtr.reset_index(drop=True), feat_agg(_tx_tr, _v_tr.index, _v_tr)], axis=1).set_index(Xtr.index)
             Xa_va = pd.concat([Xva.reset_index(drop=True), feat_agg(_tx_va, _v_va.index, _v_va)], axis=1).set_index(Xva.index)
-        if a_oof == "random":
+        if a_oof in ("random", "group", "step"):
             # 5-fold random out-of-fold scoring within the window: each row scored by a model that
             # saw the other 4/5 of the window (same periods), the way test rows are scored by a
             # model that knows their period
-            from sklearn.model_selection import StratifiedKFold
+            from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
             idx_w = np.flatnonzero(win)
             fold_models = []
             # optional: rows from the a_extra_hist steps just before the window are added to every
             # fold scorer's training data (never scored themselves): stronger scorers, same targets
             extra = np.flatnonzero((~win) & (t >= t.max() - (last_k - 1) - a_extra_hist)) if a_extra_hist else np.array([], dtype=int)
-            for tr_i, va_i in StratifiedKFold(oof_folds, shuffle=True, random_state=seed).split(idx_w, ytr[idx_w]):
+            if a_oof == "group":
+                # step 11 round 3 (plan_step11.md): under random folds the scorer of neighbour j saw
+                # row i (label included) 80% of the time, so i's neighbour numbers carry a dose of
+                # its own label (nb_out_mean AUC 0.902 random vs 0.889 grouped, 2026-10-13); test
+                # scorers never saw a test label. Folds by connected component of the labelled
+                # window subgraph: no scorer of j has seen any neighbour of j. Same period kept.
+                import scipy.sparse as sp
+                from scipy.sparse.csgraph import connected_components
+                tx_w = L_tx[Xtr.index.to_numpy()[idx_w]]; pos = pd.Series(np.arange(len(idx_w)), index=tx_w)
+                e_w = edges[edges.txId1.isin(pos.index) & edges.txId2.isin(pos.index)]
+                adj = sp.coo_matrix((np.ones(len(e_w)), (pos[e_w.txId1].to_numpy(), pos[e_w.txId2].to_numpy())), shape=(len(idx_w),) * 2)
+                groups = connected_components(adj, directed=False)[1]
+                splits = StratifiedGroupKFold(oof_folds, shuffle=True, random_state=seed).split(idx_w, ytr[idx_w], groups)
+            elif a_oof == "step":
+                # step 11 round 5: leave-one-step-out within the window — each step scored by a model on
+                # the other 13 window steps (before and after it): like the test scorer it never saw the
+                # row's period and has ~the same data; no leak, since edges never cross steps
+                tw = t[idx_w]
+                splits = [(np.flatnonzero(tw != s_), np.flatnonzero(tw == s_)) for s_ in np.unique(tw)]
+            else:
+                splits = StratifiedKFold(oof_folds, shuffle=True, random_state=seed).split(idx_w, ytr[idx_w])
+            for tr_i, va_i in splits:
                 a_i, b_i = np.r_[idx_w[tr_i], extra], idx_w[va_i]
                 m_f = model(seed).fit(Xa_tr.iloc[a_i], ytr[a_i]); fold_models.append(m_f)
                 pA[b_i] = m_f.predict_proba(Xa_tr.iloc[b_i])[:, 1]
@@ -398,7 +431,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
         sc_tr = pd.Series(pA, index=tx_tr); sc_tr = sc_tr[sc_tr.notna()]
         if unlab and scored:
             sc_tr = pd.concat([sc_tr, pd.Series(scored)])
-        if a_test_from_folds and a_oof == "random":
+        if a_test_from_folds and a_oof in ("random", "group", "step"):
             # test / validation rows scored by the average of the OOF fold models, so they are
             # scored by the same kind of model (trained on (k-1)/k of the window) as the training rows
             pA_va = np.mean([m_f.predict_proba(Xa_va)[:, 1] for m_f in fold_models], axis=0)
@@ -431,19 +464,26 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
                         h = feat_agg(tx_, sc_.index, full[cols])          # mean over neighbours of their own side-means
                         for c in nbf:
                             F_[f"nbf_h2_{side}_{c}"] = h[f"nbf_{side}_mean_nbf_{side}_mean_{c}"].to_numpy()
+            # step 11 round 4 (combined candidate): the extras below may use only the first
+            # nb_extra_k features (step-1 gain order) while the means cover all nb_feats
+            nbx = nbf[:nb_extra_k] if nb_extra_k else nbf
+            vx_tr, vx_va = vals_tr[nbx], vals_va[nbx]
+            if nb_extra_stats:
+                Ftr = pd.concat([Ftr, feat_agg(tx_tr, sc_tr.index, vx_tr, nb_extra_stats)], axis=1)
+                Fva = pd.concat([Fva, feat_agg(tx_va, sc_va.index, vx_va, nb_extra_stats)], axis=1)
             if nb_feat_delta:
                 # the row's own value minus its neighbours' mean: a difference trees cannot form from
                 # two columns with a few splits (blank where there is no neighbour)
                 for side in ("in", "out"):
-                    for c in nbf:
+                    for c in nbx:
                         Ftr[f"nbf_{side}_delta_{c}"] = Xtr[c].to_numpy() - Ftr[f"nbf_{side}_mean_{c}"].to_numpy()
                         Fva[f"nbf_{side}_delta_{c}"] = Xva[c].to_numpy() - Fva[f"nbf_{side}_mean_{c}"].to_numpy()
             if nb_feat_scorew:
-                Ftr = pd.concat([Ftr, feat_agg_scorew(tx_tr, sc_tr, vals_tr)], axis=1)
-                Fva = pd.concat([Fva, feat_agg_scorew(tx_va, sc_va, vals_va)], axis=1)
+                Ftr = pd.concat([Ftr, feat_agg_scorew(tx_tr, sc_tr, vx_tr)], axis=1)
+                Fva = pd.concat([Fva, feat_agg_scorew(tx_va, sc_va, vx_va)], axis=1)
             if nb_feat_top1:
-                Ftr = pd.concat([Ftr, feat_agg_top1(tx_tr, sc_tr, vals_tr)], axis=1)
-                Fva = pd.concat([Fva, feat_agg_top1(tx_va, sc_va, vals_va)], axis=1)
+                Ftr = pd.concat([Ftr, feat_agg_top1(tx_tr, sc_tr, vx_tr)], axis=1)
+                Fva = pd.concat([Fva, feat_agg_top1(tx_va, sc_va, vx_va)], axis=1)
         if nb_comm:
             comm = communities(edges, pd.concat([d.train.set_index("txId")["time_step"], d.test.set_index("txId")["time_step"]]))
 
@@ -544,6 +584,13 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             keep_n = (ts_va >= 43) & (pA_va < 0.02)
             A = pd.concat([A, B[keep_n]], ignore_index=True); yB = np.r_[yB, np.zeros(int(keep_n.sum()), int)]
             tB = np.r_[tB, ts_va[keep_n]]; wB = None if wB is None else np.r_[wB, np.ones(keep_n.sum())]
+        if b_blocks:
+            # step 11 round 6 (2026-10-15): feature-block ensemble — model B fitted three times, on all
+            # columns, on the local raw block + the neighbour columns, and on the aggregated raw block + the
+            # neighbour columns; probabilities averaged. Column order inside each block is kept.
+            loc = set(d.LOCAL); raw_b = list(Xtr_b.columns); nb_b = [c for c in A.columns if c not in set(raw_b)]
+            blocks = [list(A.columns), [c for c in raw_b if c in loc] + nb_b, [c for c in raw_b if c not in loc] + nb_b]
+            return np.mean([fit_B(A[cols], yB, tB, wB, seed).predict_proba(B[cols])[:, 1] for cols in blocks], axis=0)
         mB = fit_B(A, yB, tB, wB, seed)
         pB = mB.predict(B) if b_rank else mB.predict_proba(B.fillna(-1) if b_learner == "et" else B)[:, 1]
         if b_rank:
@@ -754,6 +801,46 @@ FAMILIES = {
                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_top1=True), BAG5),
     "B15_nbfeat_pseudo_p43neg": ("B15 two-stage, random OOF, top-10 neighbour feature means, + the confidently licit-scored post-43 test rows as pseudo-label-0 model-B training rows (transductive negatives; CV is a no-op for the flag; post-43 splice donor), bagged x5", "clean",
                                  two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_pseudo_post43_neg=True), BAG5),
+    # step 11, round 3 (user-approved 2026-10-13): the training-row scorer's label leak through
+    # neighbours — OOF folds grouped by connected component of the labelled window subgraph
+    "B15_nbfeat_goof": ("B15 two-stage, top-10 neighbour feature means, model-A OOF folds grouped by connected component of the labelled window subgraph (no scorer of a neighbour saw the row's label), bagged x5", "clean",
+                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=10), BAG5),
+    "B15_nbfeat_all_goof": ("B15 two-stage, means of all 159 features over labelled neighbours, model-A OOF folds grouped by connected component of the labelled window subgraph, bagged x5", "clean",
+                            two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # step 11 round 4 (2026-10-14): every CV-positive gate-failed change stacked into one model —
+    # grouped OOF + neighbour means into model A + max / delta / argmax-neighbour profile of the
+    # top-10 features + the step's mean model-A score; each alone was unreadable (0.988-0.994)
+    "B15_nbfeat_combo": ("B15 two-stage, top-10 neighbour feature means, grouped OOF + top-10 means into model A + max, delta and argmax-neighbour profile of the top-10 + step-mean model-A score (all CV-positive single changes stacked), bagged x5", "clean",
+                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=10, nb_feats_into_A=True,
+                                   nb_extra_stats=("max",), nb_feat_delta=True, nb_feat_top1=True, step_ctx=True), BAG5),
+    "B15_nbfeat_all_combo": ("B15 two-stage, means of all 159 features over labelled neighbours, grouped OOF + top-10 means into model A + max, delta and argmax-neighbour profile of the top-10 + step-mean model-A score, bagged x5", "clean",
+                             two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, nb_extra_k=10, nb_feats_into_A=True,
+                                       nb_extra_stats=("max",), nb_feat_delta=True, nb_feat_top1=True, step_ctx=True), BAG5),
+    # step 11 round 5 (2026-10-14): leave-one-step-out OOF scoring of training rows (period-blind, data-matched)
+    "B15_nbfeat_all_soof": ("B15 two-stage, means of all 159 features over labelled neighbours, model-A OOF leave-one-step-out within the window (scorer never saw the row's period, like the test scorer; no neighbour leak), bagged x5", "clean",
+                            two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="step", nb_feats=159), BAG5),
+    # step 11 round 6 (2026-10-15): one model-B change each on Final 1 (fam_B15_nbfeat_all_goof_bag15, 0.96310)
+    "B15_nbfeat_all_goof_col10": ("B15 two-stage, all-159 neighbour means, grouped OOF, model B colsample_bytree 1.0 (every tree sees the six neighbour-score numbers), bagged x5", "clean",
+                                  two_stage(14, b_params={**B15_PARAMS, "colsample_bytree": 1.0}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_dart": ("B15 two-stage, all-159 neighbour means, grouped OOF, model B with DART boosting (drop rate 0.1), bagged x5", "clean",
+                                 two_stage(14, b_params={**B15_PARAMS, "boosting_type": "dart", "drop_rate": 0.1}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_blocks": ("B15 two-stage, all-159 neighbour means, grouped OOF, model B = average of three fits: all columns / local raw block + neighbour columns / aggregated raw block + neighbour columns, bagged x5", "clean",
+                                   two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), BAG5),
+    # step 11 round 7 (2026-10-16): learner diversity for the blend — XGBoost as model B on Final 1's inputs
+    # (on the older base it ranked 0.944 like the LightGBM model B at -0.002 public: the block model's profile)
+    "B15_nbfeat_all_goof_xgb": ("B15 two-stage inputs (all-159 neighbour means, grouped OOF), model B = XGBoost depth 4, 300 rounds, lr 0.05, 60% columns (blend member), bagged x5", "clean",
+                                two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, b_learner="xgb"), BAG5),
+    "B15_nbfeat_all_goof_xgb_seedsBC": ("B15_nbfeat_all_goof_xgb, seeds 5-14 (seed check and the 15-seed bag fam_B15_nbfeat_all_goof_xgb_bag15)", "clean",
+                                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, b_learner="xgb"), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_seedsBC": ("B15_nbfeat_all_goof_blocks, seeds 5-14 (for the 15-seed bag fam_B15_nbfeat_all_goof_blocks_bag15)", "clean",
+                                           two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_soof_seedsBC": ("B15_nbfeat_all_soof, seeds 5-14 (seed check of its CV and the 15-seed bag fam_B15_nbfeat_all_soof_bag15)", "clean",
+                                    two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="step", nb_feats=159), tuple(range(5, 15))),
+    "B15_nbfeat_all_combo_seedsBC": ("B15_nbfeat_all_combo, seeds 5-14 (for the 15-seed bag fam_B15_nbfeat_all_combo_bag15)", "clean",
+                                     two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, nb_extra_k=10, nb_feats_into_A=True,
+                                               nb_extra_stats=("max",), nb_feat_delta=True, nb_feat_top1=True, step_ctx=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_seedsBC": ("B15 two-stage, means of all 159 features over labelled neighbours, grouped OOF, seeds 5-14 (for the 15-seed bag fam_B15_nbfeat_all_goof_bag15)", "clean",
+                                    two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
     # step 11 (docs/plans/plan_step11.md): post-43 splice donors. Not direct upload candidates
     # (a low-rate trainer has no high-rate competence, so the CV sanity gate does not apply);
     # only their post-43 block order is read, through post43_probes.py floorsplice.

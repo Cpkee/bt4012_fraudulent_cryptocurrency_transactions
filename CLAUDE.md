@@ -40,8 +40,12 @@ slots is a day of lost information: there should always be readable candidates b
    model, with a `CONFIG` cell for variants; it imports no project modules. When the best model
    changes, update the notebook's `CONFIG` (or its code, if the pipeline changes) and re-execute
    it; it checks itself against the uploaded CSV. `families.py` remains the fast experiment
-   harness, but a model is not final until the notebook reproduces it. Rename the notebook to
-   the NUS student number (`eXXXXXXX.ipynb`) for the final hand-in.
+   harness, but a model is not final until the notebook reproduces it. **Hand-in notebook
+   (2026-10-16): `submission_notebook.ipynb`**, the same pipeline stripped to the final model and
+   laid out as the report's §2.1–2.3 (preprocessing & features / model & validation / exploration &
+   final strategy; exploration results quoted from the ledger, not re-run; `FAST` / `USE_GPU`
+   flags). When the final model changes, change both notebooks. Rename `submission_notebook.ipynb`
+   to the NUS student number (`eXXXXXXX.ipynb`) for the final hand-in.
 
 ## Data facts (measured)
 
@@ -52,8 +56,9 @@ slots is a day of lost information: there should always be readable candidates b
 - Labelled fraud rate per step swings 0.43%–35.97% inside train. From step 43 on, every model we
   built scores almost everything as licit (mean predicted rate 0.022 vs 0.085 for 36–42); the data
   cannot say why.
-- Six columns (`feat_100, 101, 103, 136, 137, 139`) identify the time period (near-linear in step,
-  99% of test values out of training range). Removed everywhere.
+- Six columns (`feat_100, 101, 103, 136, 137, 139`) identify the time period (single-feature
+  adversarial AUC 0.99–1.00, Spearman with step 0.90–1.00; `feat_100, 101, 103` also have 99% of
+  test values out of training range, the other three 0%). Removed everywhere.
 
 ## The current model (0.96069), in order
 
@@ -137,6 +142,17 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_B15_nbfeat_pseudo_pre43 | confident test rows of steps 36–42 as pseudo-labelled model-B training rows | 0.9555 (−0.0052: transductive axis closed) |
 | fam_post43floor_sub06 | floorsplice: Final 1's pre-43, sub_06's post-43 block order | 0.8851 (−0.0069 vs the floor: all-history orders the block worse) |
 | fam_post43floor_lowrate | floorsplice: the regime-matched (low-rate steps) block order | 0.8780 (−0.0141: much worse; the offline pre-screen misranked both donors) |
+| fam_B15_nbfeat_all_goof | all-159 model with model-A OOF folds grouped by connected component (label-leak fix) | 0.9621 (tie vs 0.9618 / 0.9632, as gated 0.995; selectable) |
+| fam_B15_nbfeat_all_goof_bag15 | the 15-seed bag of the grouped-OOF model | 0.9631 (= Final 1 0.96313; leak-free, selectable) |
+| fam_bag15_post43floorrev | the floor probe with Final 1's post-43 order reversed (calibration) | 0.8384 (−0.054 vs the floor → within-block AUC ≈ 0.87–0.96: post-43 campaign closed) |
+| **fam_B15_nbfeat_all_combo** | all-159 + grouped OOF + top-10 means into A + max/delta/argmax-neighbour of the top-10 + step-mean score (5 seeds) | **0.9636** (2026-10-14: highest public score; +0.0011 vs the 5-seed parents' mean, inside seed noise, CV-consistent) |
+| fam_B15_nbfeat_combo | the same stacked changes on the top-10 model | 0.9595 (−0.0012 vs 0.96069: the two board readings of the extras average ≈ 0) |
+| fam_B15_nbfeat_all_combo_bag15 | the 15-seed bag of the all-159 combo | 0.9632 (tie with both bag15s: the 5-seed 0.9636 was seed noise; extras closed) |
+| fam_B15_nbfeat_all_soof / _bag15 | all-159 with leave-one-step-out OOF (5 / 15 seeds) | 0.9632 / 0.9629 (ties: 15-seed bags of all four OOF protocols read 0.9629–0.9632) |
+| **fam_B15_nbfeat_all_goof_blocks** | Final 1 model with model B = mean of fits on all / local+nb / aggregated+nb columns (5 seeds) | **0.9638** (2026-10-15: highest public score; +0.001 vs the 5-seed family, tie band, but ranks 0.920 like Final 1: a blend partner) |
+| fam_B15_nbfeat_all_goof_blocks_bag15 | the 15-seed bag of the block-ensemble model | 0.9639 (+0.0008 vs Final 1: tie) |
+| **fam_blend_goof_blocks_bag15** | rank average of Final 1 (goof bag15) and the 15-seed block-ensemble bag (0.921 apart) | **0.9654** (2026-10-16: highest public score, +0.0023 vs Final 1: diversity between equally good models pays) |
+| fam_B15_nbfeat_all_goof_xgb | Final 1's inputs with model B = XGBoost (5 seeds; ranks 0.944 like Final 1) | 0.9619 (−0.001 vs the 5-seed family: a tie; CV had it −0.003 to −0.014) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
@@ -148,7 +164,8 @@ Label curve for training neighbour numbers: 0% labels 0.9562, 50% 0.9542, 100% 0
 the lowest-ranked participant 0 points. Finals must be selected by hand on Kaggle (two files;
 the better private score counts). Standing choice, revised whenever the best changes: the largest seed bag of the
 highest-scoring model plus a seed bag of the strongest file that ranks < 0.97 like it (step 10: `fam_B15_nbfeat_all_bag15` = **0.96313** +
-`fam_B15_Aoof_random_bag10` = **0.95970**; both scored 2026-10-10: **select these two on Kaggle**).
+`fam_B15_Aoof_random_bag10` = **0.95970**; both scored 2026-10-10: **select these two on Kaggle**). **Revised 2026-10-14: Final 1 = `fam_B15_nbfeat_all_goof_bag15` (0.96310, leak-free grouped OOF, ties the old
+Final 1 and is CV-better on both seed pairs) + Final 2 = `fam_B15_Aoof_random_bag10`; `final_model*.ipynb` switched to grouped OOF and re-executed 2026-10-15: both reproduce it exactly (4.4e-16).**
 
 ## What we learned (the through-line for the report)
 
@@ -306,6 +323,38 @@ features, `two_stage(nb_feat_top1=True)`). **Both failed the gate — 0.993 / 0.
 neighbour information takes: **the axis is closed for good on amount, statistic, entry point, reach and kind**; no
 slot spent.
 
+**Step 11 round 3 (user-approved 2026-10-13): label leak in random OOF.** Under random 5-fold OOF the scorer of a
+neighbour saw the row's own label 80% of the time (`nb_out_mean` AUC 0.902 random vs 0.889 grouped). Built
+`two_stage(a_oof="group")` (StratifiedGroupKFold, groups = connected components of the labelled window subgraph):
+`B15_nbfeat_goof` CV 0.9739 / 0.9293 / 0.8443 vs parent 0.9689 / 0.9139 / 0.8215 (largest gain at the horizon), and
+`B15_nbfeat_all_goof` 0.9656 / 0.9056 / 0.8113 vs 0.9627 / 0.8963 / 0.8018. **Both fail the gate (0.994 / 0.995 vs
+their parents)**: the leak is real but does not move the test ranking. OOF-protocol axis closed; no slot spent. **User decision 2026-10-13: near the top a
+gate failure is not a veto for a principled fix** — the gate says whether the board can read a change, not whether it
+is better. `fam_B15_nbfeat_all_goof` is uploaded as a finals candidate (its score = "selectable", not a reading) and
+bagged to 15 seeds (`B15_nbfeat_all_goof_seedsBC` = seeds 5–14) to compete with Final 1 like for like. Read: 0.96209 (5 seeds) and **0.96310 (15 seeds) = Final 1**.
+`fam_bag15_post43floorrev` read **0.83841** (−0.054 vs the floor): Final 1's within-post-43 AUC ≈ 0.87–0.96, headroom
+≤ 0.002–0.009: **post-43 campaign closed with evidence**.
+
+**Step 11 round 4 (2026-10-14, user goal: 7–8 more days of gains; `plan_step11.md`):** all CV-positive gate-failed
+changes stacked (`two_stage(a_oof="group", nb_feats_into_A=True, nb_extra_k=10, nb_extra_stats=("max",),
+nb_feat_delta=True, nb_feat_top1=True, step_ctx=True)`). `B15_nbfeat_combo` CV 0.9746 / 0.9311 / 0.8491 (best top-10
+CV), gate **0.982** vs `fam_B15_nbfeat` (the singles were 0.988–0.994: the changes add up); `B15_nbfeat_all_combo`
+0.9671 / 0.9097 / 0.8150, 0.992 vs the goof bag15. **`fam_B15_nbfeat_all_combo` read 0.96362 (2026-10-14), the highest public score** (+0.0011 vs the 5-seed parents' mean); seeds 5–14 building for the 15-seed bag = the Final 1 candidate.
+
+**Step 11 round 6 (2026-10-15, `plan_step11.md`): one model-B change each on Final 1.** Colsample 1.0: CV lower, 0.992
+(dropped). DART (300 rounds): clear CV loss (−0.009 / −0.024 / −0.017), ranks < 0.93 like older weaker files (held).
+**Feature-block ensemble `B15_nbfeat_all_goof_blocks`** (`two_stage(b_blocks=True)`: model B = mean of fits on all /
+local + neighbour / aggregated + neighbour columns): CV 0.9657 / 0.9069 / 0.8166 (≥ parent), **0.920 vs Final 1: the
+first readable candidate with non-negative CV since nbfeat_all.** Read 0.96382 (highest public; tie band but distinct): seeds 5–14 building for `blocks_bag15`; next = `blocks_bag15` and the blend (Final 1 + blocks_bag15)/2; finals decided by those two readings.
+
+**Step 11 rounds 7–8 (2026-10-16):** blocks_bag15 read 0.96385 (tie); **the blend (Final 1 + blocks_bag15, rank average)
+read 0.96539, the highest public score**. XGBoost model B (0.944 vs Final 1) failed the pre-set CV inclusion rule (−0.005 /
+−0.015 / −0.024 on seeds 5–6); held. `src/blend_cv.py` scores blends on CV (cached member predictions): CV does **not**
+confirm the blend's board gain (goof + blocks 0.9674 / 0.9097 / 0.8155 vs goof 0.9675 / 0.9112 / 0.8199); soof is the
+CV-best single model on both seed pairs. **Finals: Final 1 = `fam_blend_goof_blocks_bag15` (board-best) + Final 2 =
+`fam_B15_nbfeat_all_soof_bag15` (CV-best).** `final_model*.ipynb` carry `CONFIG["members"]` (default `("lgbm", "blocks")`) and a pooled-rank
+blend; re-executed 2026-10-16, both reproduce Final 1 (2.2e-16) and each member bag (≤ 5.6e-16) exactly. `fam_blend3_goof_blocks_xgb_bag15` built (members + `"xgb"`), unreadable vs the 2-way blend; finals choice at the end.
+
 ## Future implementation notes
 
 - Run scripts from anywhere as `.venv/bin/python src/families.py <name>` (also `src/probes.py`,
@@ -331,7 +380,8 @@ slot spent.
 
 | path | role |
 |---|---|
-| `final_model.ipynb` / `final_model_kaggle.ipynb` | **the submission notebooks** (local / Kaggle with GPU switch): self-contained, raw files → CSV for the current best model; rename to the student number for hand-in. Stay at the root: they write `submission.csv` here and check against `submissions/` |
+| `submission_notebook.ipynb` | **the hand-in notebook** (rename to the student number): report-structured (§2.1–2.3), self-contained, final model only, raw files → `submission.csv`, checks against `submissions/`; runs locally and on Kaggle (`USE_GPU`) |
+| `final_model.ipynb` / `final_model_kaggle.ipynb` | the variant notebooks (local / Kaggle with GPU switch): self-contained, raw files → CSV for the current best model, with `CONFIG` switches for variants (OOF protocol, xgb member). Stay at the root: they write `submission.csv` here and check against `submissions/` |
 | `submission.csv` | output of the last `final_model*.ipynb` run |
 | `src/families.py` | current campaign: reference recipe, windows, weights, two-stage, distinctness gate, ledger rows |
 | `src/probes.py` | step-4 probe factory (sub_07 reference; superseded) — `Data` class still used by `families.py` |
