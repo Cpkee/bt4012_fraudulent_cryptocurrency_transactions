@@ -360,3 +360,227 @@ blocks and xgb 15-seed bags; 0.994 vs the 2-way blend: unreadable, uploaded to b
 `final_model*.ipynb` now carry `CONFIG["members"]` (model-B variants on shared model A and inputs: "lgbm", "blocks", "xgb")
 and a pooled-rank `blend`; default `("lgbm", "blocks")` = Final 1. The validation section reports every member and the blend;
 the reproducibility check compares each member bag and the blend with its uploaded file.
+
+## Round 9 (user-approved 2026-10-17): two new blend members, each read alone first
+
+Only a member uploaded alone is readable (any blend of ≥ 3 ranks 0.99+ like the current one). Built:
+- `B15_nbfeat_all_goof_localA` (`two_stage(a_cols="local")`): model A on the local block only, so the six neighbour
+  numbers come from a different scorer; model B unchanged (all columns).
+- `B15_nbfeat_all_goof_rsub` (`two_stage(b_rsub=5)`): model B = mean of 5 fits, each on a random half of the 159 raw
+  columns + all neighbour columns (subsets drawn from the seed): the block idea with random groups.
+**Pre-set rule:** a member joins the final blend if it ranks < 0.95 like each existing member (goof / blocks / xgb bag15s)
+and scores ≥ 0.962 alone; a joiner gets its 15-seed bag and a blend file the next day. Slots of 2026-10-17: 1 = the
+3-way blend (selectable), 2 = localA alone, 3 = rsub alone (if it is distinct; otherwise the slot is kept).
+
+**Round 9 result (2026-10-17): neither member qualifies.**
+
+| member | CV seeds 0–1 (vs goof 0.9656 / 0.9056 / 0.8113) | vs goof bag15 | vs blocks bag15 | vs xgb bag15 |
+|---|---|---|---|---|
+| `localA` | 0.9684 / 0.9146 / 0.8278 (+0.003 / +0.009 / +0.017) | 0.991 | 0.914 | 0.940 |
+| `rsub` | 0.9663 / 0.9063 / 0.8063 (+0.001 / +0.001 / −0.005) | 0.977 | 0.922 | 0.937 |
+
+Both are distinct from blocks and xgb but too close to goof (rule: < 0.95 vs every member). Model A's input set again barely
+moves the final ranking (0.991), as every model-A change before; random column halves land between goof and blocks.
+`localA` has the strongest seeds 0–1 CV of any single model besides soof — a candidate replacement for goof inside the
+blend only if a seed 5–6 check holds (board-unreadable either way). No upload for either on 2026-10-17.
+
+**Read 2026-10-17: `fam_blend3_goof_blocks_xgb_bag15` = 0.96532**, −0.00007 vs the 2-way blend: an exact tie, as predicted.
+Finals stand: Final 1 = `fam_blend_goof_blocks_bag15` (0.96539; simpler of the tied pair), Final 2 =
+`fam_B15_nbfeat_all_soof_bag15` (CV-best; the 3-way blend is 0.994 like Final 1 and would hedge nothing).
+
+## Round 10 (user-approved 2026-10-18): drift-aware feature removal on the goof model
+
+Both lists live in `families.py` (`DRIFT_ADV`, `DRIFT_UNSTABLE`); the columns leave the raw block and, through
+`Xtr.columns`, the neighbour-mean block. `feat_2` example: window 90th percentile exceeded by 10% of window rows but
+28% / 32% of test rows (steps 36–42 / 43–49). Unstable list = pooled window AUC ≥ 0.05 from 0.5 with the per-step
+direction opposite in ≥ 3 of 14 window steps (selected on window labels: CV optimistic).
+
+| file | cols | CV seeds 0–1 (goof 0.9656 / 0.9056 / 0.8113) | vs goof bag15 | vs blocks bag15 | vs xgb bag15 | vs blend |
+|---|---|---|---|---|---|---|
+| `dropadv` (5 adversarial > 0.85) | 154 | **0.9714 / 0.9204 / 0.8434** (+0.006 / +0.015 / +0.032) | 0.970 | 0.920 | 0.936 | 0.964 |
+| `dropunstable` (23 direction-unstable) | 136 | 0.9678 / 0.9124 / 0.8182 (+0.002 / +0.007 / +0.007) | 0.976 | 0.902 | 0.918 | 0.958 |
+
+`dropadv` is the largest CV gain since the two-stage, growing with the horizon (the drift signature), and readable.
+Reading rule vs the goof 5-seed family (≈ 0.9625–0.9629): ≥ +0.003 → seeds 5–14 for a 15-seed bag and a blend with
+goof replaced; tie → blend member candidate (0.92–0.94 like blocks/xgb); ≤ −0.003 → `feat_2`'s signal outweighs its drift.
+
+**Read 2026-10-18: `dropadv` = 0.95957** — −0.0025 vs goof 5-seed (0.96209), −0.003 vs the 5-seed family: tie-to-loss,
+against the largest CV gain since the two-stage. Per-period levels: post-43 mean score +38% vs +9% pre-43 (pre/post ratio
+11.1 → 8.8), within-period orders 0.975 / 0.961 like goof. **Correction (same day):** that probability-mean ratio is a
+low-end calibration artefact; in ranks (what AUC sees) dropadv puts *fewer* post-43 rows in the top 5% (0.096 vs goof
+0.113), like levelamp25 (0.093, −0.0015): not a flattening. Cause not identified. Drift handling closed on removal as on normalisation. `dropunstable` held (weaker,
+label-selected rationale; its drift columns overlap only via feat_112/113).
+
+## Round 11 (user-approved 2026-10-18): model-B hyperparameters on goof, as blend-member candidates
+
+| file | CV seeds 0–1 (goof 0.9656 / 0.9056 / 0.8113) | vs goof15 | vs blocks15 | vs xgb15 | vs blend | post-43 share of top 5% (goof 0.113) |
+|---|---|---|---|---|---|---|
+| `xt` (`extra_trees=True`) | 0.9652 / 0.9048 / 0.8124 (tie) | 0.955 | 0.913 | 0.942 | 0.953 | 0.111 |
+| `reg` (min 100 rows/leaf, 30% cols, λ 5) | 0.9638 / 0.8993 / 0.8007 (−0.002 / −0.006 / −0.011) | 0.978 | 0.903 | 0.949 | 0.959 | 0.115 |
+
+`xt` ties goof on CV with a different ranking (the most distinct same-strength member after blocks); it misses the round-9
+join rule only on goof (0.955 vs < 0.95). `reg` is CV-lower on every fold and 0.978 like goof: held. Upload `xt` alone vs
+goof 5-seed (0.96209): ≥ ~0.962 → seeds 5–14 and a blend file (xt replacing or joining goof); ≤ −0.003 → closed.
+
+**Read 2026-10-18: `xt` = 0.96678** — +0.0047 vs goof 5-seed (0.96209), 3× seed noise, +0.0014 vs the Final 1 blend: the
+highest public score, from a single 5-seed model whose CV tied its parent (CV blind again, this time in our favour).
+Mechanism reading: random split thresholds stop model B fitting exact cut-points of the training period; the board
+rewards robustness that the historical folds cannot see.
+
+## Round 12 (2026-10-18): build on extra_trees
+
+Queued (`artifacts/logs/round12_xt.log`): `blocks_xt` (the blend partner on the xt recipe), `xt_seedsBC` (seeds 5–14 →
+`xt_bag15`, the Final 1 candidate), `xt_r600` (600 rounds). Next, one change each after these read: the blend
+`xt_bag15 + blocks_xt_bag15`; coarser thresholds (`max_bin` 63, a deterministic cousin of extra_trees); extra_trees in
+model A as well; model-B leaves 31 under extra_trees (random splits may shift the depth optimum).
+Finals rule: once `xt_bag15` is built and uploaded it replaces goof as Final 1's base; both notebooks get the
+`extra_trees` switch and are re-executed before any finals change.
+
+**Round 12 built (2026-10-18):**
+
+| file | CV (xt seeds 0–1 0.9652 / 0.9048 / 0.8124) | vs xt | vs goof15 | vs blocks15 | post-43 top-5% share |
+|---|---|---|---|---|---|
+| `xt_seedsBC` (seeds 5–6 CV) | 0.9661 / 0.9073 / 0.8115 (seed-consistent) | 0.995 | – | – | – |
+| `xt_bag15` (5 × seeds 0–4 + 10 × seeds 5–14) / 15 | – | 0.998 | 0.959 | 0.918 | – |
+| `xt_r600` | 0.9668 / 0.9093 / 0.8134 | 0.974 | 0.937 | 0.881 | 0.106 |
+| `blocks_xt` | 0.9628 / 0.8985 / 0.8029 (below blocks 0.9657 / 0.9069 / 0.8166) | 0.945 | 0.912 | 0.970 | 0.132 |
+
+Blends (pooled ranks): xt15 + blocks15 0.976 vs xt / 0.989 vs the blend; xt15 + blocks_xt 0.984 vs xt — finals-only
+(unreadable). Queued: `xt_bin63` (max_bin 63), `xt_L31` (31 leaves). Upload order: `xt_r600` (readable, moves further
+along the axis that paid: 0.937 vs goof15 where xt is 0.955), then `blocks_xt` (readable 0.945 vs xt), `xt_bag15`
+(selectable; Final 1 base once the notebooks reproduce it).
+
+**Read 2026-10-18: `xt_r600` = 0.96363** (−0.0032 vs xt: rejected; 300 rounds stays). `xt_bin63`: 0.993 like xt, CV
+0.9674 / 0.9106 / 0.8096 — unreadable, dropped. Caution: r600 ranks 0.974 like xt yet reads 0.003 lower, and is only
++0.0015 above goof 5-seed, so part of xt's +0.0047 may be seed luck. **Next upload = `xt_seedsBC` (seeds 5–14 only, no
+seed shared with xt) as a replicate**, as `fam_B15_nbfeat_all_seedsB` was: ≥ ~0.965 → xt is real, `xt_bag15` becomes
+Final 1's base and the notebooks get extra_trees; ≤ ~0.963 → xt was a tie with a lucky draw, finals stay.
+`xt_L31`: CV 0.9644 / 0.9020 / 0.8024 (below xt on every fold), 0.981 like xt — fails the gate, dropped. The extra_trees
+tuning neighbourhood (rounds, bins, leaves) is mapped: only the base xt setting (15 leaves, 300 rounds) is a candidate.
+
+## Round 14 target (set by the user 2026-10-18): beat first place, public 0.97033
+
+| reference | public | gap to 0.97033 |
+|---|---|---|
+| `xt` (5 seeds, one reading) | 0.96678 | +0.0036 |
+| Final 1 blend (goof + blocks) | 0.96539 | +0.0049 |
+| `xt_r600` (0.974 like xt) | 0.96363 | +0.0067 |
+
+**Size of the gap in our own units.** Every real gain so far: two-stage +0.004, random OOF +0.0023, neighbour feature
+means +0.0022, blend +0.0023, `xt` +0.0047 (unconfirmed). The gap is one `xt`-sized gain, or two typical ones. Seed noise
+is ≈ 0.0015 per 5-seed file, so a single reading of +0.0036 is never conclusive: the target counts as reached when a
+seed-bagged file (≥ 10 seeds) reads > 0.97033.
+
+**Feasibility (judgement, not measurement).** If the replicate confirms `xt` near 0.966, one more gain of the blend's
+size (+0.002–0.003) plus the bag lands at ≈ 0.968–0.969, still short; beating 0.97033 needs about two more real gains in
+about seven days, a rate we have matched only once (2026-10-05 → 10-08). If the replicate puts `xt` near 0.964, the gap is
+≈ 0.006, about three gains: unlikely. Estimate: roughly one chance in four to one in three if `xt` holds, well under one
+in five if it does not. The leader's 0.97033 is itself one public reading on 30% of the test set and may contain luck;
+the private board (70%) decides, so the route must not rely on tuning to the public 30%.
+
+**Route, in order of expected gain:**
+1. `xt_seedsBC` replicate (slot 1, 2026-10-19): fixes the base level.
+2. The ensemble on the xt recipe: `blocks_xt` alone, then `xt_bag15 + blocks_xt_bag15` rank blend — the one structure that
+   has gained on the board (+0.0023 from two equally strong, different members).
+3. More randomised members of equal strength (the diversity the board pays for): `xt` with a different `colsample_bytree`
+   (0.4 / 0.8), and `extra_trees` with random-subspace model B (`b_rsub`), each read alone, joined only if ≥ 0.962 alone and
+   < 0.95 like each member.
+4. If `xt` holds: notebooks get the `extra_trees` switch; finals = the best bagged blend + the strongest different file.
+
+**Read 2026-10-19: `xt_seedsBC` = 0.96736** (seeds 5–14, no seed shared with xt): **xt confirmed.** Two independent seed
+sets read 0.96678 / 0.96736 (mean 0.9671, +0.005 vs the goof 5-seed family). Rank 6; gap to first place 0.97033 = +0.0030.
+Slots 2–3 of 2026-10-19: `xt_bag15` (selectable Final 1 base) and `blocks_xt` (blend-member reading: joins if ≥ 0.962).
+**Read 2026-10-19: `blocks_xt` = 0.96630** (+0.0025 vs blocks 5-seed; 0.945 like xt): qualifies as a blend member. Blend
+estimate (members' mean + the earlier blend's ≈ +0.002) ≈ 0.968–0.969. Built at once from existing CSVs: the pooled-rank
+blend of `xt_bag15` and `blocks_xt` (5 seeds) as an early look; the like-for-like version needs `blocks_xt` seeds 5–14.
+
+**Round 14 members built (2026-10-19): neither qualifies.**
+
+| file | CV (xt 0.9652 / 0.9048 / 0.8124) | vs xt15 | vs blocks_xt | vs blocks15 | post-43 top-5% |
+|---|---|---|---|---|---|
+| `xt_rsub` (5 random column halves, extra_trees) | 0.9639 / 0.9002 / 0.8002 | 0.985 | 0.951 | 0.919 | 0.108 |
+| `xt_col04` (40% columns per tree) | 0.9639 / 0.9002 / 0.8005 | 0.994 | 0.946 | 0.914 | 0.112 |
+
+Both fail the gate against xt (0.984 / 0.993) and the member rule (< 0.95 like each member). Under extra_trees, extra
+column randomisation lands back on xt's ranking: the randomisation axis is saturated at xt itself. Without extra_trees
+`rsub` was 0.977 like goof; with it, 0.985 like xt. Column-sampling settings closed (1.0, 0.8 not built, 0.6 = xt, 0.4).
+The blend partner for xt stays `blocks_xt` (different column *blocks*, not random columns); its seeds 5–14 are building.
+**Built 2026-10-19:** `blocks_xt_seedsBC` (seeds 5–6 CV 0.9640 / 0.9018 / 0.8040, seed-consistent), `blocks_xt_bag15`
+(5 × seeds 0–4 + 10 × seeds 5–14) / 15, and the like-for-like blend
+`fam_blend_B15_nbfeat_all_goof_xt_bag15_B15_nbfeat_all_goof_blocks_xt_bag15` (pooled ranks; 0.987 like xt_seedsBC,
+0.986 like blocks_xt): the Final 1 candidate, unreadable vs its members by construction.
+
+## Round 15 (2026-10-19): after the xt + blocks_xt blend (0.96828)
+
+**Read:** `fam_blend_..._xt_bag15_..._blocks_xt_bag15` = **0.96828**, the highest public score: +0.0016 over its members'
+mean (0.9671 / 0.9663), the same blend effect as before (+0.0019). Two-member diversity pays twice now; a third member has
+not (goof + blocks + xgb tied the 2-way blend, its xgb member 0.005 weaker than the others). Gap to first: +0.0021.
+
+**1. Make Final 1 reproducible (no slot; required by CLAUDE.md rule 8).** `final_model.ipynb`, `final_model_kaggle.ipynb`,
+`submission_notebook.ipynb`: model B gets `extra_trees` per member; `CONFIG["members"]` default = (xt, blocks_xt);
+re-execute and check the blend and each member bag against the uploaded files.
+
+**2. Finals.** Final 1 = this blend (selected on Kaggle). Final 2 should be strong *and* different, as a hedge against the
+`extra_trees` gain being a public-30% effect. Candidates already scored: the old blend goof + blocks (0.96539, no
+extra_trees, 0.971 like Final 1) or soof_bag15 (0.96290, 0.950). Proposed: **the old blend** (stronger; still the most
+different strong file).
+
+**3. Third member (gate first, slot only if it qualifies).** Stricter rule than round 9, because a weaker third member tied:
+≥ 0.9655 alone (within ≈ 0.0015 of the members) and < 0.95 like both members. Candidates in order:
+- `soof_xt`: leave-one-step-out model A + extra_trees model B. soof15 is the CV-best model, tied goof on the board and
+  ranks 0.959 / 0.916 like the two members: similar strength, partly different ranking.
+- `nbonly_xt`: model B on the neighbour columns only (6 scores + 318 means), extra_trees: the one column view the blocks
+  member does not have; strength unknown (local-only lost −0.012 alone before).
+- `xtA`: extra_trees in model A as well (the neighbour scores both members see change); gate check only.
+Not pursued: XGBoost member (0.945 / 0.915 distinct but ≈ 0.005 weaker; its 3-way blend tied), more column randomisation
+(saturated, round 14), blend weights other than equal (unreadable, fits the public 30%).
+
+**4. Report.** Drift-evidence cell in `submission_notebook.ipynb` §1.3 (adversarial AUCs of kept features, `feat_2` shift);
+§2–3 describe extra_trees (hypothesis: robustness to cut-points under drift) and the two-member blend.
+
+**Feasibility of 0.97033:** needs ≈ +0.002, about one more blend-sized gain. Plausible only through a third member as strong
+as the first two; the earlier 3-way blend says the odds are modest (judgement: about one in four).
+
+**Round 15 third-member search (2026-10-19): none qualifies; search closed.**
+
+| file | CV (xt 0.9652 / 0.9048 / 0.8124) | vs xt15 | vs blocks_xt15 | vs Final 1 | post-43 top-5% |
+|---|---|---|---|---|---|
+| `soof_xt` | 0.9634 / 0.8992 / 0.8024 | 0.996 | 0.950 | 0.985 | 0.115 |
+| `nbonly_xt` | 0.8737 / 0.7996 / 0.7062 (fails sanity) | 0.392 | 0.490 | 0.445 | 0.307 |
+| `xtA` | 0.9671 / 0.9104 / 0.8208 | 0.993 | 0.943 | 0.981 | 0.111 |
+
+Under extra_trees, the model-A side (OOF protocol, extra_trees in A) converges onto xt's ranking: soof ranked 0.959 like
+xt15 without extra_trees in B and 0.996 with it. The one view that differs strongly, neighbour columns only, is far weaker
+(CV −0.09) and loses the period level (post-43 share of the top 5% 0.307 vs 0.11): the row's own features are essential.
+Only column-*block* structure (blocks_xt) gives a different ranking at equal strength. `xtA` has the best CV of the xt
+family (+0.002 / +0.006 / +0.008) but is unreadable (0.993); held as a possible like-for-like swap for xt inside Final 1,
+which the board could not read either. Finals stand.
+
+**Round 16 (2026-10-19/20).** `inout_xt` (blocks by money direction): CV 0.9699 / 0.9181 / 0.8290, 0.987 like xt — not
+readable, not a member; held. **`xt_w21` read 0.96755** (CV +0.008 / +0.023 / +0.033, 0.982 like xt): +0.0004 vs the xt mean,
+a tie; 14 steps stays. Under exact thresholds 21 steps cost −0.004; under extra_trees it costs nothing and gains nothing:
+consistent with the cut-point hypothesis, but no route to 0.9700. Both routes of round 16 closed.
+
+**Round 17 built (2026-10-20): longer windows under extra_trees as a third member.**
+
+| file | CV (identical for every window ≥ 21: the hard and horizon folds train on steps ≤ 21) | vs xt15 | vs blocks_xt15 | vs Final 1 | post-43 top-5% |
+|---|---|---|---|---|---|
+| `xt_w28` | 0.9728 / 0.9278 / 0.8454 | 0.957 | 0.923 | 0.952 | 0.104 |
+| `xt_all` (35 steps) | 0.9728 / 0.9278 / 0.8454 | **0.927** | **0.887** | 0.918 | 0.102 |
+
+Both pass the upload gate. `xt_all` meets the member rule's distinctness half (< 0.95 like both members): the first strong
+candidate that does. Upload `xt_all` alone: ≥ 0.9655 → joins (seeds 5–14 → bag15 → 3-member blend); < 0.9655 → not a
+member. `xt_w28` (0.957 like xt, just outside the member rule) maps the window curve under extra_trees (14: 0.9671,
+21: 0.9676, 28: ?, 35: ?) and is the fallback if `xt_all` is weak.
+**Read 2026-10-20: `xt_all` = 0.96486** (−0.0022 vs the xt mean): below the member bar. Window curve under extra_trees:
+14 → 0.9671, 21 → 0.9676, 35 → 0.9649 (without extra_trees: 0.9484 / 0.9462 / 0.9437 on the single-stage). The
+third-member search is closed on columns, model A, randomisation and training data. `xt_w28` not uploaded (no decision
+value: it would sit between 21 and 35 and ranks 0.957 like xt).
+
+**Round 18 built (2026-10-20): `xt_w21_seedsBC`** (seeds 5–14; CV seeds 5–6 0.9726 / 0.9267 / 0.8386 vs seeds 0–1
+0.9728 / 0.9278 / 0.8454: seed-consistent) and `xt_w21_bag15` (5 × seeds 0–4 + 10 × seeds 5–14) / 15, 0.984 like xt_bag15.
+Upload `xt_w21_seedsBC` as the replicate of 0.96755 (0.996 like it: unreadable by design, a noise reading): ≥ ~0.968 → two
+seed sets favour 21 steps, build `blocks_xt_w21` (15 seeds) and the 21-step Final 1 variant; ≤ ~0.967 → 14 = 21, Final 1 stands.
+**Read 2026-10-20: `xt_w21_seedsBC` = 0.96676.** 21 steps: 0.96755 / 0.96676 (mean 0.9672); 14 steps: 0.96678 / 0.96736
+(mean 0.9671). Equal. The window is closed under extra_trees; Final 1 (0.96828) stands. With the third-member and window
+searches closed, no readable route to 0.9700 remains in the two-stage + blend architecture.

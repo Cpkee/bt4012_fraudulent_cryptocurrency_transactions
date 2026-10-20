@@ -9,6 +9,9 @@ until the deadline.** Do not plan around "freezing" or hand-in; the notebook and
 maintained alongside, not instead of, the search for the next gain. Every day with unused upload
 slots is a day of lost information: there should always be readable candidates built and gated.
 
+**Target (set by the user, 2026-10-18): beat the current first place, public 0.97033.** Our best is the xt + blocks_xt blend 0.96828
+(gap +0.0021; before it xt 0.96678 / 0.96736; the Final 1 blend 0.96539, gap +0.0049). Feasibility and route: `docs/plans/plan_step11.md` (round 14).
+
 ## Rules for any session (read before touching anything)
 
 1. **Evidence comes from the Kaggle files only.** Papers may be cited for methods; never as facts
@@ -153,8 +156,18 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_B15_nbfeat_all_goof_blocks_bag15 | the 15-seed bag of the block-ensemble model | 0.9639 (+0.0008 vs Final 1: tie) |
 | **fam_blend_goof_blocks_bag15** | rank average of Final 1 (goof bag15) and the 15-seed block-ensemble bag (0.921 apart) | **0.9654** (2026-10-16: highest public score, +0.0023 vs Final 1: diversity between equally good models pays) |
 | fam_B15_nbfeat_all_goof_xgb | Final 1's inputs with model B = XGBoost (5 seeds; ranks 0.944 like Final 1) | 0.9619 (−0.001 vs the 5-seed family: a tie; CV had it −0.003 to −0.014) |
+| fam_blend3_goof_blocks_xgb_bag15 | rank average of the goof, blocks and XGBoost 15-seed bags | 0.9653 (= the 2-way blend: tie) |
+| fam_B15_nbfeat_all_goof_dropadv | goof without the 5 drifting columns with adversarial AUC > 0.85 (`feat_2, 106, 107, 109, 142`), raw + neighbour means | 0.9596 (2026-10-18: −0.0025 vs goof 5-seed although CV +0.006 / +0.015 / +0.032; drift removal closed) |
+| **fam_B15_nbfeat_all_goof_xt** | goof with model B = LightGBM `extra_trees=True` (random split thresholds), 5 seeds | **0.9668** (2026-10-18: highest public score; +0.0047 vs goof 5-seed, CV tied) |
+| fam_B15_nbfeat_all_goof_xt_r600 | xt with 600 model-B rounds | 0.9636 (2026-10-18: −0.0032 vs xt, rejected) |
+| **fam_B15_nbfeat_all_goof_xt_seedsBC** | xt, seeds 5–14 (replicate, no seed shared) | **0.9674** (2026-10-19: highest public score; xt confirmed, mean of the two seed sets 0.9671; rank 6) |
+| fam_B15_nbfeat_all_goof_blocks_xt | block-ensemble model B with `extra_trees` (5 seeds) | 0.9663 (2026-10-19: +0.0025 vs blocks; blend member for xt) |
+| **fam_blend_..._xt_bag15_..._blocks_xt_bag15** | rank average of the 15-seed xt and blocks_xt bags | **0.9683** (2026-10-19: highest public score; +0.0016 over the members' mean; **Final 1**) |
+| fam_B15_nbfeat_all_goof_xt_w21 | xt with a 21-step window | 0.9676 (2026-10-20: tie vs xt 0.9671; 14 steps stays) |
+| fam_B15_nbfeat_all_goof_xt_all | xt trained on all 35 steps (0.927 like xt) | 0.9649 (2026-10-20: below the 0.9655 member bar; third-member search closed) |
+| fam_B15_nbfeat_all_goof_xt_w21_seedsBC | xt with 21 steps, seeds 5–14 (replicate) | 0.9668 (2026-10-20: 21-step mean 0.9672 = 14-step mean 0.9671; window closed) |
 
-Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
+Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). **2026-10-18: first place 0.97033.** Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
 Label curve for training neighbour numbers: 0% labels 0.9562, 50% 0.9542, 100% 0.9462 (closed).
 **Reference = fam_B15_nbfeat** (0.96069; `final_model.ipynb` and `final_model_kaggle.ipynb` reproduce it exactly);
@@ -355,6 +368,35 @@ CV-best single model on both seed pairs. **Finals: Final 1 = `fam_blend_goof_blo
 `fam_B15_nbfeat_all_soof_bag15` (CV-best).** `final_model*.ipynb` carry `CONFIG["members"]` (default `("lgbm", "blocks")`) and a pooled-rank
 blend; re-executed 2026-10-16, both reproduce Final 1 (2.2e-16) and each member bag (≤ 5.6e-16) exactly. `fam_blend3_goof_blocks_xgb_bag15` built (members + `"xgb"`), unreadable vs the 2-way blend; finals choice at the end.
 
+**Step 11 round 10 (2026-10-18, `plan_step11.md`): drift-aware feature removal.** `dropadv` (5 columns with adversarial
+AUC > 0.85 removed) had the largest CV gain since the two-stage, growing with the horizon, and read **0.95957** (−0.0025 vs
+goof 5-seed): CV wrong again on a drift decision. Not a level flattening: its probability-mean pre/post ratio fell
+(11.1 → 8.8) but in ranks it puts *fewer* post-43 rows in the top 5% (0.096 vs 0.113, like levelamp25 0.093); probability
+means mislead here (low-end calibration), use rank shares. Cause not identified. Drift handling is closed on
+removal as on normalisation; `dropunstable` (23 direction-unstable columns, 0.976 vs goof, CV optimistic) is built, not uploaded.
+
+**Finals (2026-10-19, user-approved): Final 1 = `fam_blend_B15_nbfeat_all_goof_xt_bag15_B15_nbfeat_all_goof_blocks_xt_bag15`
+(0.96828: rank average of the 15-seed xt and blocks_xt bags), Final 2 = `fam_blend_goof_blocks_bag15` (0.96539, the same
+blend without extra_trees: the hedge if the extra_trees gain is public-only).** `final_model.ipynb` / `final_model_kaggle.ipynb`
+(`CONFIG["members"]` default `("xt", "blocks_xt")`; `("lgbm", "blocks")` = Final 2) and the hand-in notebook `e1130084.ipynb`
+(`extra_trees=True` in `CONFIG["model_b"]`; `False` = Final 2) re-executed 2026-10-19: all three reproduce Final 1 and both
+member bags exactly (≤ 4.4e-16).
+
+**Rounds 16–18 (2026-10-19/20): window and third member under extra_trees, closed.** `inout_xt` 0.987 like xt (held);
+window curve with extra_trees 14 → 0.9671 (two seed sets), 21 → 0.9672 (two seed sets: 0.96755 / 0.96676), 35 → 0.9649:
+14 and 21 are equal, all history still costs ≈ 0.002 (≈ 0.005 without extra_trees); `xt_all` ranks 0.927 like xt but sits
+below the 0.9655 member bar. No readable route to 0.9700 remains in this architecture; Final 1 (0.96828) stands.
+
+**Round 15 (2026-10-19): third-member search closed.** `soof_xt` 0.996 and `xtA` 0.993 like xt (model-A changes converge
+onto xt once model B uses extra_trees; xtA has the best xt-family CV but is unreadable); `nbonly_xt` (neighbour columns only)
+fails the sanity gate (CV 0.874) and ranks 0.39 like xt. Only column-block structure gives an equally strong, different member.
+
+**Rounds 11–13 (2026-10-18, `plan_step11.md`, `plan_step12_dro.md`):** **`xt` (model B `extra_trees=True`) read 0.96678,
+the highest public score** (+0.0047 vs goof 5-seed, CV tied); replicate `xt_seedsBC` (seeds 5–14) is the next upload, then
+`xt_bag15` / `blocks_xt`. Its neighbourhood is mapped: 600 rounds 0.96363 (rejected), max_bin 63 (0.993) and 31 leaves (0.981,
+CV lower) unreadable; strongly regularised model B CV-lower, held. Group DRO over window steps (`two_stage(b_dro=...)`) closed
+before a build: model B scores every window step 0.978–1.000 even held out (τ² = 0, weights stay 1); step reweighting closed.
+
 ## Future implementation notes
 
 - Run scripts from anywhere as `.venv/bin/python src/families.py <name>` (also `src/probes.py`,
@@ -380,7 +422,7 @@ blend; re-executed 2026-10-16, both reproduce Final 1 (2.2e-16) and each member 
 
 | path | role |
 |---|---|
-| `submission_notebook.ipynb` | **the hand-in notebook** (rename to the student number): report-structured (§2.1–2.3), self-contained, final model only, raw files → `submission.csv`, checks against `submissions/`; runs locally and on Kaggle (`USE_GPU`) |
+| `e1130084.ipynb` | **the hand-in notebook** (was `submission_notebook.ipynb`, renamed to the student number): report-structured (§2.1–2.3), self-contained, final model only, raw files → `submission.csv`, checks against `submissions/`; runs locally and on Kaggle (`USE_GPU`) |
 | `final_model.ipynb` / `final_model_kaggle.ipynb` | the variant notebooks (local / Kaggle with GPU switch): self-contained, raw files → CSV for the current best model, with `CONFIG` switches for variants (OOF protocol, xgb member). Stay at the root: they write `submission.csv` here and check against `submissions/` |
 | `submission.csv` | output of the last `final_model*.ipynb` run |
 | `src/families.py` | current campaign: reference recipe, windows, weights, two-stage, distinctness gate, ledger rows |
