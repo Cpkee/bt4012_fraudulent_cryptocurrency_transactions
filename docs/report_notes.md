@@ -49,18 +49,20 @@ AUC 1.000 on the raw features. Tested one at a time, six columns each identify t
 
 | feature | single-feature adversarial AUC | Spearman with time_step | share of test values outside train range |
 |---|---|---|---|
+| feat_136 | 1.000 | 0.994 | 0% |
 | feat_101 | 0.999 | 0.997 | 99.5% |
-| feat_103 | 0.998 | 0.995 | 99.4% |
-| feat_100 | 0.998 | 0.992 | 99.2% |
-| feat_136 | 0.996 | 0.994 | 0% |
-| feat_139 | 0.977 | 0.954 | 0% |
-| feat_137 | 0.941 | 0.896 | 0% |
+| feat_103 | 0.999 | 0.995 | 99.4% |
+| feat_100 | 0.999 | 0.992 | 99.2% |
+| feat_139 | 0.992 | 0.954 | 0% |
+| feat_137 | 0.990 | 0.896 | 0% |
 
-Their per-step medians rise almost linearly with time, and all six sit in the block of columns
-(94–165) whose values behave like neighbourhood summaries, so they are most plausibly aggregates
-of a time-like quantity over neighbours. Whatever their construction, a tree model splits on them
-to learn *when* a transaction happened; on the test period nearly every value falls in the newest
-leaf. They were removed from every model (159 features remain).
+(Adversarial AUCs from `artifacts/single_feature_adversarial_auc_raw.csv`; Spearman on train rows.)
+Their per-step medians rise steadily with time, three of them (`feat_100`, `feat_101`, `feat_103`)
+almost linearly, and all six sit in the block of columns (94–165) whose values behave like
+neighbourhood summaries, so they are most plausibly aggregates of a time-like quantity over
+neighbours. Whatever their construction, a tree model splits on them to learn *when* a transaction
+happened. On the three out-of-range columns nearly every test value falls in the newest leaf; the
+other three stay inside the training range but still separate the periods. They were removed from every model (159 features remain).
 Removing them costs nothing on rolling CV (0.9737 → 0.9726, within seed noise).
 
 The cleaned set still scores 0.997 on adversarial validation, driven by `feat_2`, `feat_106`,
@@ -560,6 +562,69 @@ into the final model. Artifacts: `artifacts/cv_gnn_summary.csv`, `artifacts/cv_g
 
 ---
 
+## Steps 10–12 (18–19 Oct) — drift, random split thresholds, the final blend
+
+Steps 4–9 (two-stage model, neighbour features, OOF protocols, block ensemble) are recorded in `docs/results.md`,
+`docs/plans/plan_step6..11.md` and the hand-in notebook's §3.1 table. Starting point here: the goof + blocks blend,
+public 0.96539.
+
+### 2.1 (cont.) Drift in the kept features, and removing it
+
+Single-feature adversarial AUC (one-feature LightGBM, labelled train rows vs test rows, 3-fold OOF; computed in
+`e1130084.ipynb` §1.3) after the six period identifiers: `feat_2` 0.935, `feat_106` 0.903, `feat_107` 0.876,
+`feat_109` 0.876, `feat_142` 0.853. `feat_2` (6th by gain) has 10% of window rows above the window's 90th percentile
+and 28% / 32% of test rows (steps 36–42 / 43–49). Within the window, 79 of 153 features have a per-step AUC on the
+other side of 0.5 in at least 20% of steps.
+
+| change (on the goof model, 5 seeds) | CV 3-fold / hard / horizon | public | reading |
+|---|---|---|---|
+| parent (goof) | 0.9656 / 0.9056 / 0.8113 | 0.96209 | – |
+| drop the 5 features with adversarial AUC > 0.85 | 0.9714 / 0.9204 / 0.8434 | 0.95957 | −0.0025: loss despite the largest CV gain since the two-stage |
+| drop 23 direction-unstable features (label-selected) | 0.9678 / 0.9124 / 0.8182 | – | not uploaded |
+
+The CV gain grew with the horizon, the drift signature, and the board rejected it: the drifting columns carry signal
+the model needs. (A probability-mean ratio first suggested the change flattened the period level; in ranks it did the
+opposite — fewer post-43 rows in the top 5%, 0.096 vs 0.113 — so the cause is not identified. Rank shares, not
+probability means, are the right lens for AUC.)
+
+### 2.2 (cont.) Random split thresholds in model B (`extra_trees`)
+
+| model B change (goof inputs) | CV | Spearman vs goof | public |
+|---|---|---|---|
+| `extra_trees=True` (seeds 0–4) | 0.9652 / 0.9048 / 0.8124 (tie) | 0.955 | **0.96678** |
+| same, seeds 5–14 (replicate, no shared seed) | 0.9661 / 0.9073 / 0.8115 | 0.995 vs above | **0.96736** |
+| + 600 rounds | 0.9668 / 0.9093 / 0.8134 | 0.974 vs xt | 0.96363 (−0.0032) |
+| + max_bin 63 / 31 leaves / 40% columns / random column halves | ≤ xt | 0.981–0.994 vs xt | not uploaded |
+| strongly regularised model B (min 100 rows/leaf, 30% cols, λ 5) | 0.9638 / 0.8993 / 0.8007 | 0.978 | not uploaded |
+| block ensemble + `extra_trees` | 0.9628 / 0.8985 / 0.8029 | 0.945 vs xt | **0.96630** (+0.0025 vs blocks) |
+
+Two independent seed sets agree (mean 0.9671, +0.005 over the goof 5-seed family) while CV is level: the gain is
+invisible to the historical folds, like the recency window's. Generic regularisation did not reproduce it, so the
+effect is specific to threshold placement. Hypothesis (not measured): random cut-points depend less on where the
+training period's values of drifting features sit. Further column randomisation on top lands back on xt's ranking
+(0.985–0.994): the randomisation axis is saturated at xt itself.
+
+### 2.3 (cont.) Final blend and finals
+
+| file | public |
+|---|---|
+| xt, 15 seeds / blocks_xt, 15 seeds (members) | ≈ 0.9671 / 0.9663 |
+| **rank average of the two (Final 1)** | **0.96828** (+0.0016 over the members' mean; the earlier blend gained +0.0019) |
+| goof + blocks blend without `extra_trees` (Final 2, hedge) | 0.96539 |
+
+The members rank the test rows 0.949 alike. Final 2 hedges the possibility that the `extra_trees` gain is specific to
+the public 30%. All three notebooks reproduce Final 1 to ≤ 4.4e-16 (19 Oct).
+
+### 2.2 (cont.) Group DRO over window steps: closed before a build
+
+Group DRO (Sagawa et al. 2020; method only) reweights training groups toward the worst-performing ones. With groups =
+the 14 window steps and risk = 1 − per-step AUC (shrunk by its Hanley–McNeil standard error, weight ratio ≤ 8,
+ESS ≥ 65%), model B scored every step 0.978–1.000 out of fold — even with the step held out entirely (pooled 0.9971) —
+and the between-step spread was within noise (τ² = 0): the weights stay 1. The two worst steps are the two lowest-fraud
+steps (23, 33) but within ~1.5 standard errors. The test period's difficulty is distance in time (horizon fold 0.81),
+not which window step it resembles; reweighting by distance is the recency weighting already read (tie). Step
+reweighting is closed on size, age, test-likeness and difficulty.
+
 ## 3. Results and discussion — pointers
 
 ### Public leaderboard after step 2, and what a leaderboard number can and cannot say
@@ -618,6 +683,8 @@ Methods used:
 
 - Saerens, Latinne & Decaestecker 2002, Adjusting the outputs of a classifier to new a priori probabilities. https://ieeexplore.ieee.org/document/6789726
 - Lipton, Wang & Smola 2018, Detecting and Correcting for Label Shift with Black Box Predictors. https://arxiv.org/abs/1802.03916
+- Geurts, Ernst & Wehenkel 2006, Extremely randomized trees. Machine Learning 63(1). https://doi.org/10.1007/s10994-006-6226-1
+- Sagawa, Koh, Hashimoto & Liang 2020, Distributionally Robust Neural Networks for Group Shifts. https://arxiv.org/abs/1911.08731
 
 Related work consulted for context only; no statement about this dataset is taken from them:
 

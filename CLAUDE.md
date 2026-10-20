@@ -9,6 +9,9 @@ until the deadline.** Do not plan around "freezing" or hand-in; the notebook and
 maintained alongside, not instead of, the search for the next gain. Every day with unused upload
 slots is a day of lost information: there should always be readable candidates built and gated.
 
+**Target (set by the user, 2026-10-18): beat the current first place, public 0.97033.** Our best is the xt + blocks_xt blend 0.96828
+(gap +0.0021; before it xt 0.96678 / 0.96736; the Final 1 blend 0.96539, gap +0.0049). Feasibility and route: `docs/plans/plan_step11.md` (round 14).
+
 ## Rules for any session (read before touching anything)
 
 1. **Evidence comes from the Kaggle files only.** Papers may be cited for methods; never as facts
@@ -40,8 +43,12 @@ slots is a day of lost information: there should always be readable candidates b
    model, with a `CONFIG` cell for variants; it imports no project modules. When the best model
    changes, update the notebook's `CONFIG` (or its code, if the pipeline changes) and re-execute
    it; it checks itself against the uploaded CSV. `families.py` remains the fast experiment
-   harness, but a model is not final until the notebook reproduces it. Rename the notebook to
-   the NUS student number (`eXXXXXXX.ipynb`) for the final hand-in.
+   harness, but a model is not final until the notebook reproduces it. **Hand-in notebook
+   (2026-10-16): `submission_notebook.ipynb`**, the same pipeline stripped to the final model and
+   laid out as the report's §2.1–2.3 (preprocessing & features / model & validation / exploration &
+   final strategy; exploration results quoted from the ledger, not re-run; `FAST` / `USE_GPU`
+   flags). When the final model changes, change both notebooks. Rename `submission_notebook.ipynb`
+   to the NUS student number (`eXXXXXXX.ipynb`) for the final hand-in.
 
 ## Data facts (measured)
 
@@ -52,8 +59,9 @@ slots is a day of lost information: there should always be readable candidates b
 - Labelled fraud rate per step swings 0.43%–35.97% inside train. From step 43 on, every model we
   built scores almost everything as licit (mean predicted rate 0.022 vs 0.085 for 36–42); the data
   cannot say why.
-- Six columns (`feat_100, 101, 103, 136, 137, 139`) identify the time period (near-linear in step,
-  99% of test values out of training range). Removed everywhere.
+- Six columns (`feat_100, 101, 103, 136, 137, 139`) identify the time period (single-feature
+  adversarial AUC 0.99–1.00, Spearman with step 0.90–1.00; `feat_100, 101, 103` also have 99% of
+  test values out of training range, the other three 0%). Removed everywhere.
 
 ## The current model (0.96069), in order
 
@@ -132,8 +140,34 @@ slots is a day of lost information: there should always be readable candidates b
 | fam_B15_Aoof_random_bag10 | the 10-seed bag of the random-OOF two-stage: **Final 2** (ranks 0.964 like Final 1) | 0.9597 (2026-10-10) |
 | fam_bag15_steprank | Final 1 replaced by its within-step percentile rank (cross-period calibration question) | 0.9412 (−0.022: the period level is right; closed) |
 | fam_bag15_levelamp25 | Final 1 with each period's level amplified by 0.25 in log-odds (the mirror probe) | 0.9617 (−0.0015, tie band: the level is used about right; axis closed both ways) |
+| fam_bag15_post43floor | Final 1 with the post-43 block ranked below every pre-43 row (information probe) | 0.8920 (−0.071: the block holds ≈ 1.3–2.4% fraud that Final 1 ranks above most pre-43 licit rows) |
+| fam_B15_nbfeat_all_bag30 | the 30-seed bag (seeds 0–29) of the all-159 model | 0.9631 (= bag15: seed variance flat from 15 seeds; Final 1 stays bag15) |
+| fam_B15_nbfeat_pseudo_pre43 | confident test rows of steps 36–42 as pseudo-labelled model-B training rows | 0.9555 (−0.0052: transductive axis closed) |
+| fam_post43floor_sub06 | floorsplice: Final 1's pre-43, sub_06's post-43 block order | 0.8851 (−0.0069 vs the floor: all-history orders the block worse) |
+| fam_post43floor_lowrate | floorsplice: the regime-matched (low-rate steps) block order | 0.8780 (−0.0141: much worse; the offline pre-screen misranked both donors) |
+| fam_B15_nbfeat_all_goof | all-159 model with model-A OOF folds grouped by connected component (label-leak fix) | 0.9621 (tie vs 0.9618 / 0.9632, as gated 0.995; selectable) |
+| fam_B15_nbfeat_all_goof_bag15 | the 15-seed bag of the grouped-OOF model | 0.9631 (= Final 1 0.96313; leak-free, selectable) |
+| fam_bag15_post43floorrev | the floor probe with Final 1's post-43 order reversed (calibration) | 0.8384 (−0.054 vs the floor → within-block AUC ≈ 0.87–0.96: post-43 campaign closed) |
+| **fam_B15_nbfeat_all_combo** | all-159 + grouped OOF + top-10 means into A + max/delta/argmax-neighbour of the top-10 + step-mean score (5 seeds) | **0.9636** (2026-10-14: highest public score; +0.0011 vs the 5-seed parents' mean, inside seed noise, CV-consistent) |
+| fam_B15_nbfeat_combo | the same stacked changes on the top-10 model | 0.9595 (−0.0012 vs 0.96069: the two board readings of the extras average ≈ 0) |
+| fam_B15_nbfeat_all_combo_bag15 | the 15-seed bag of the all-159 combo | 0.9632 (tie with both bag15s: the 5-seed 0.9636 was seed noise; extras closed) |
+| fam_B15_nbfeat_all_soof / _bag15 | all-159 with leave-one-step-out OOF (5 / 15 seeds) | 0.9632 / 0.9629 (ties: 15-seed bags of all four OOF protocols read 0.9629–0.9632) |
+| **fam_B15_nbfeat_all_goof_blocks** | Final 1 model with model B = mean of fits on all / local+nb / aggregated+nb columns (5 seeds) | **0.9638** (2026-10-15: highest public score; +0.001 vs the 5-seed family, tie band, but ranks 0.920 like Final 1: a blend partner) |
+| fam_B15_nbfeat_all_goof_blocks_bag15 | the 15-seed bag of the block-ensemble model | 0.9639 (+0.0008 vs Final 1: tie) |
+| **fam_blend_goof_blocks_bag15** | rank average of Final 1 (goof bag15) and the 15-seed block-ensemble bag (0.921 apart) | **0.9654** (2026-10-16: highest public score, +0.0023 vs Final 1: diversity between equally good models pays) |
+| fam_B15_nbfeat_all_goof_xgb | Final 1's inputs with model B = XGBoost (5 seeds; ranks 0.944 like Final 1) | 0.9619 (−0.001 vs the 5-seed family: a tie; CV had it −0.003 to −0.014) |
+| fam_blend3_goof_blocks_xgb_bag15 | rank average of the goof, blocks and XGBoost 15-seed bags | 0.9653 (= the 2-way blend: tie) |
+| fam_B15_nbfeat_all_goof_dropadv | goof without the 5 drifting columns with adversarial AUC > 0.85 (`feat_2, 106, 107, 109, 142`), raw + neighbour means | 0.9596 (2026-10-18: −0.0025 vs goof 5-seed although CV +0.006 / +0.015 / +0.032; drift removal closed) |
+| **fam_B15_nbfeat_all_goof_xt** | goof with model B = LightGBM `extra_trees=True` (random split thresholds), 5 seeds | **0.9668** (2026-10-18: highest public score; +0.0047 vs goof 5-seed, CV tied) |
+| fam_B15_nbfeat_all_goof_xt_r600 | xt with 600 model-B rounds | 0.9636 (2026-10-18: −0.0032 vs xt, rejected) |
+| **fam_B15_nbfeat_all_goof_xt_seedsBC** | xt, seeds 5–14 (replicate, no seed shared) | **0.9674** (2026-10-19: highest public score; xt confirmed, mean of the two seed sets 0.9671; rank 6) |
+| fam_B15_nbfeat_all_goof_blocks_xt | block-ensemble model B with `extra_trees` (5 seeds) | 0.9663 (2026-10-19: +0.0025 vs blocks; blend member for xt) |
+| **fam_blend_..._xt_bag15_..._blocks_xt_bag15** | rank average of the 15-seed xt and blocks_xt bags | **0.9683** (2026-10-19: highest public score; +0.0016 over the members' mean; **Final 1**) |
+| fam_B15_nbfeat_all_goof_xt_w21 | xt with a 21-step window | 0.9676 (2026-10-20: tie vs xt 0.9671; 14 steps stays) |
+| fam_B15_nbfeat_all_goof_xt_all | xt trained on all 35 steps (0.927 like xt) | 0.9649 (2026-10-20: below the 0.9655 member bar; third-member search closed) |
+| fam_B15_nbfeat_all_goof_xt_w21_seedsBC | xt with 21 steps, seeds 5–14 (replicate) | 0.9668 (2026-10-20: 21-step mean 0.9672 = 14-step mean 0.9671; window closed) |
 
-Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). Model-B depth
+Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). **2026-10-18: first place 0.97033.** Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
 Label curve for training neighbour numbers: 0% labels 0.9562, 50% 0.9542, 100% 0.9462 (closed).
 **Reference = fam_B15_nbfeat** (0.96069; `final_model.ipynb` and `final_model_kaggle.ipynb` reproduce it exactly);
@@ -143,7 +177,8 @@ Label curve for training neighbour numbers: 0% labels 0.9562, 50% 0.9542, 100% 0
 the lowest-ranked participant 0 points. Finals must be selected by hand on Kaggle (two files;
 the better private score counts). Standing choice, revised whenever the best changes: the largest seed bag of the
 highest-scoring model plus a seed bag of the strongest file that ranks < 0.97 like it (step 10: `fam_B15_nbfeat_all_bag15` = **0.96313** +
-`fam_B15_Aoof_random_bag10` = **0.95970**; both scored 2026-10-10: **select these two on Kaggle**).
+`fam_B15_Aoof_random_bag10` = **0.95970**; both scored 2026-10-10: **select these two on Kaggle**). **Revised 2026-10-14: Final 1 = `fam_B15_nbfeat_all_goof_bag15` (0.96310, leak-free grouped OOF, ties the old
+Final 1 and is CV-better on both seed pairs) + Final 2 = `fam_B15_Aoof_random_bag10`; `final_model*.ipynb` switched to grouped OOF and re-executed 2026-10-15: both reproduce it exactly (4.4e-16).**
 
 ## What we learned (the through-line for the report)
 
@@ -246,6 +281,122 @@ the graph's usable content on the test period is the labelled one-hop neighbourh
 neighbour-information change in the direction opposite to before. **Community / SNA axis closed** (homophily curve and
 the PageRank self-score trap remain report material).
 
+**2026-10-11 (user decision, two slots; `plan_step10.md` tail):** slot 1 = `fam_bag15_post43floor` (`src/post43_probes.py`:
+Final 1 with the post-43 block, 43.6% of rows, ranked below every pre-43 row, block order kept; Spearman 0.456): reads
+how much rankable fraud the post-43 block holds (≈ 0 → closed for good; a clear loss → the floor becomes a protocol for
+comparing post-43 scorers with the cross-block terms held fixed). Slot 2 = `fam_B15_nbfeat_all_bag30` (seeds 15–29
+building as `B15_nbfeat_all_seedsD`, averaged with Final 1): variance only, unreadable by construction, uploaded to be
+selectable; notebooks go to 30 seeds only if it is selected.
+**Read 2026-10-11: `fam_bag15_post43floor` = 0.89203, −0.071.** The post-43 block holds fraud (≈ 1.3–2.4% of its public
+rows, 27–49 positives) that Final 1 ranks above most pre-43 licit rows; the within-block ordering term has weight ≈ 0.06–0.10,
+so a better post-43 ordering is worth up to ≈ 0.01–0.02, with board noise ≈ 0.004 on that term. **Open lever: the post-43
+ordering, read through the floor protocol** (`post43_probes.py floorsplice`: pre-43 = Final 1, post-43 floored with a
+candidate's order; difference vs 0.89203 = the candidate's within-block quality). Existing files order the block 0.84–0.96
+like Final 1; first candidate `sub_06` (all-history, 0.844) is built (`fam_post43floor_sub06`). A candidate that reads positive
+becomes "Final 1 with its post-43 order, mapped onto Final 1's post-43 value range" (the level stays: the level probes say it is right).
+
+**Step 11 (2026-10-12, user-approved: all 3 slots/day this week; `docs/plans/plan_step11.md`): the post-43 ordering
+campaign.** Measured: the only training steps with a post-43-like fraud rate (< 3%) are **1–6 and 10** (9,322 labelled
+rows, 107 positives; < 5% adds 12 and 23, 176 positives) — the recent-14 window contains no low-rate regime at all.
+Offline pre-screen (`src/post43_prescreen.py`, approved as a ranker only; low-rate band E = steps 1–6, 10 as the in-data
+analogue of the block): the win14 model orders E at pooled AUC **0.810**, all-history 0.96–0.97, and a 7-leaf LightGBM
+trained on the low-rate steps (leave-one-step-out) **0.992** with a very different order (Spearman 0.37–0.50 vs win14);
+kNN fraud-similarity 0.73 (deprioritised). Era-control (train on early high-rate steps 7–9, 11): 0.93–0.95, so part of
+the gain is era proximity that cannot transfer to post-43, but the rate-matching increment (+0.04–0.06) and the ranking
+regime-matched > all-history > window survive. Built: **`fam_lowrate`** (7 leaves, steps 1–6, 10, 12, 23, bagged ×10;
+splice donor only, CV sanity gate does not apply) and **`fam_post43floor_lowrate`** (its block order spliced under
+Final 1's pre-43 rows; within-block Spearman **0.687** vs Final 1, the most different order yet). Slots of 2026-10-12:
+1 = `fam_post43floor_sub06`, 2 = `fam_B15_nbfeat_pseudo_pre43`, 3 = `fam_post43floor_lowrate`. Reading rule for splices
+vs 0.89203: ≥ +0.005 → promote to the mapped full candidate; ≤ −0.005 → next donor; between → unreadable, next donor.
+Next donors in order (plan_step11.md): post-43 confident-licit pseudo-negatives, pseudo_pre43's block order, zero-build
+splices (sub_04, recent14_local). Exit: three losses/ties from different mechanism families closes the campaign.
+
+**Read 2026-10-12 (all three slots): `fam_post43floor_sub06` 0.88509 (−0.0069), `fam_post43floor_lowrate` 0.87796
+(−0.0141), `fam_B15_nbfeat_pseudo_pre43` 0.95553 (−0.0052).** All losses. Final 1's own block order beats both motivated
+challengers — more history and regime-matched training each order the block *worse* — and the transductive axis is
+closed. The offline pre-screen misranked the two donors even relative to each other (it had regime-matched ≫
+all-history; the board read the reverse): **discredited as a ranker for temporal questions, like every offline proxy
+before it.** pseudo_pre43's block order is 0.936 like Final 1 (never readable; dropped). The open question is now
+calibration: Final 1's *absolute* within-block AUC. **Slot 1 of 2026-10-13 = `fam_bag15_post43floorrev`** (Final 1's
+block order reversed under the floor; built, gated): Δ vs 0.89203 = −w·(2·A22−1), w ≈ 0.06–0.10, so A22 = 0.5 − Δ/(2w).
+A22 ≥ ~0.85 → headroom < ~0.01, the campaign closes with evidence; A22 low → it continues. The pseudo-negatives donor
+`B15_nbfeat_pseudo_p43neg` (`two_stage(b_pseudo_post43_neg=True)`) was built 2026-10-12: CV = the parent's exactly
+(wiring check), but its within-block Spearman is **0.926** vs Final 1 — the splice is unreadable and dropped. The pattern
+is now measured three ways: **every variant of the current pipeline orders the block essentially like Final 1**
+(pseudo_pre43 0.936, p43neg 0.926, scored files 0.84–0.96); only outside models differ (sub_06 0.844, lowrate 0.687) and
+both ordered it worse. Slot 2 of 2026-10-13 is contingent on the calibration: if the campaign continues, the
+`B15_nbfeat_pseudo_p43neg` *full file* vs 0.96069 (passes the whole-file gate at 0.960; weakly motivated, sibling read
+−0.0052); if it closes, finals stand and report work resumes with one exploratory slot a day.
+
+**Step 11 round 2 (user-approved 2026-10-13, `plan_step11.md`): the neighbour-feature axis re-opened for the two
+untried kind-changes, gate-only.** `B15_nbfeat_scorew` (score-weighted neighbour feature means: the
+suspicious-neighbour profile, `two_stage(nb_feat_scorew=True)`) and `B15_nbfeat_top1` (the argmax-neighbour's raw
+features, `two_stage(nb_feat_top1=True)`). **Both failed the gate — 0.993 / 0.992 vs `fam_B15_nbfeat`, the same
+0.988–0.994 band as every step-9 variant.** Model B reaches the same test ranking whatever shape the one-hop
+neighbour information takes: **the axis is closed for good on amount, statistic, entry point, reach and kind**; no
+slot spent.
+
+**Step 11 round 3 (user-approved 2026-10-13): label leak in random OOF.** Under random 5-fold OOF the scorer of a
+neighbour saw the row's own label 80% of the time (`nb_out_mean` AUC 0.902 random vs 0.889 grouped). Built
+`two_stage(a_oof="group")` (StratifiedGroupKFold, groups = connected components of the labelled window subgraph):
+`B15_nbfeat_goof` CV 0.9739 / 0.9293 / 0.8443 vs parent 0.9689 / 0.9139 / 0.8215 (largest gain at the horizon), and
+`B15_nbfeat_all_goof` 0.9656 / 0.9056 / 0.8113 vs 0.9627 / 0.8963 / 0.8018. **Both fail the gate (0.994 / 0.995 vs
+their parents)**: the leak is real but does not move the test ranking. OOF-protocol axis closed; no slot spent. **User decision 2026-10-13: near the top a
+gate failure is not a veto for a principled fix** — the gate says whether the board can read a change, not whether it
+is better. `fam_B15_nbfeat_all_goof` is uploaded as a finals candidate (its score = "selectable", not a reading) and
+bagged to 15 seeds (`B15_nbfeat_all_goof_seedsBC` = seeds 5–14) to compete with Final 1 like for like. Read: 0.96209 (5 seeds) and **0.96310 (15 seeds) = Final 1**.
+`fam_bag15_post43floorrev` read **0.83841** (−0.054 vs the floor): Final 1's within-post-43 AUC ≈ 0.87–0.96, headroom
+≤ 0.002–0.009: **post-43 campaign closed with evidence**.
+
+**Step 11 round 4 (2026-10-14, user goal: 7–8 more days of gains; `plan_step11.md`):** all CV-positive gate-failed
+changes stacked (`two_stage(a_oof="group", nb_feats_into_A=True, nb_extra_k=10, nb_extra_stats=("max",),
+nb_feat_delta=True, nb_feat_top1=True, step_ctx=True)`). `B15_nbfeat_combo` CV 0.9746 / 0.9311 / 0.8491 (best top-10
+CV), gate **0.982** vs `fam_B15_nbfeat` (the singles were 0.988–0.994: the changes add up); `B15_nbfeat_all_combo`
+0.9671 / 0.9097 / 0.8150, 0.992 vs the goof bag15. **`fam_B15_nbfeat_all_combo` read 0.96362 (2026-10-14), the highest public score** (+0.0011 vs the 5-seed parents' mean); seeds 5–14 building for the 15-seed bag = the Final 1 candidate.
+
+**Step 11 round 6 (2026-10-15, `plan_step11.md`): one model-B change each on Final 1.** Colsample 1.0: CV lower, 0.992
+(dropped). DART (300 rounds): clear CV loss (−0.009 / −0.024 / −0.017), ranks < 0.93 like older weaker files (held).
+**Feature-block ensemble `B15_nbfeat_all_goof_blocks`** (`two_stage(b_blocks=True)`: model B = mean of fits on all /
+local + neighbour / aggregated + neighbour columns): CV 0.9657 / 0.9069 / 0.8166 (≥ parent), **0.920 vs Final 1: the
+first readable candidate with non-negative CV since nbfeat_all.** Read 0.96382 (highest public; tie band but distinct): seeds 5–14 building for `blocks_bag15`; next = `blocks_bag15` and the blend (Final 1 + blocks_bag15)/2; finals decided by those two readings.
+
+**Step 11 rounds 7–8 (2026-10-16):** blocks_bag15 read 0.96385 (tie); **the blend (Final 1 + blocks_bag15, rank average)
+read 0.96539, the highest public score**. XGBoost model B (0.944 vs Final 1) failed the pre-set CV inclusion rule (−0.005 /
+−0.015 / −0.024 on seeds 5–6); held. `src/blend_cv.py` scores blends on CV (cached member predictions): CV does **not**
+confirm the blend's board gain (goof + blocks 0.9674 / 0.9097 / 0.8155 vs goof 0.9675 / 0.9112 / 0.8199); soof is the
+CV-best single model on both seed pairs. **Finals: Final 1 = `fam_blend_goof_blocks_bag15` (board-best) + Final 2 =
+`fam_B15_nbfeat_all_soof_bag15` (CV-best).** `final_model*.ipynb` carry `CONFIG["members"]` (default `("lgbm", "blocks")`) and a pooled-rank
+blend; re-executed 2026-10-16, both reproduce Final 1 (2.2e-16) and each member bag (≤ 5.6e-16) exactly. `fam_blend3_goof_blocks_xgb_bag15` built (members + `"xgb"`), unreadable vs the 2-way blend; finals choice at the end.
+
+**Step 11 round 10 (2026-10-18, `plan_step11.md`): drift-aware feature removal.** `dropadv` (5 columns with adversarial
+AUC > 0.85 removed) had the largest CV gain since the two-stage, growing with the horizon, and read **0.95957** (−0.0025 vs
+goof 5-seed): CV wrong again on a drift decision. Not a level flattening: its probability-mean pre/post ratio fell
+(11.1 → 8.8) but in ranks it puts *fewer* post-43 rows in the top 5% (0.096 vs 0.113, like levelamp25 0.093); probability
+means mislead here (low-end calibration), use rank shares. Cause not identified. Drift handling is closed on
+removal as on normalisation; `dropunstable` (23 direction-unstable columns, 0.976 vs goof, CV optimistic) is built, not uploaded.
+
+**Finals (2026-10-19, user-approved): Final 1 = `fam_blend_B15_nbfeat_all_goof_xt_bag15_B15_nbfeat_all_goof_blocks_xt_bag15`
+(0.96828: rank average of the 15-seed xt and blocks_xt bags), Final 2 = `fam_blend_goof_blocks_bag15` (0.96539, the same
+blend without extra_trees: the hedge if the extra_trees gain is public-only).** `final_model.ipynb` / `final_model_kaggle.ipynb`
+(`CONFIG["members"]` default `("xt", "blocks_xt")`; `("lgbm", "blocks")` = Final 2) and the hand-in notebook `e1130084.ipynb`
+(`extra_trees=True` in `CONFIG["model_b"]`; `False` = Final 2) re-executed 2026-10-19: all three reproduce Final 1 and both
+member bags exactly (≤ 4.4e-16).
+
+**Rounds 16–18 (2026-10-19/20): window and third member under extra_trees, closed.** `inout_xt` 0.987 like xt (held);
+window curve with extra_trees 14 → 0.9671 (two seed sets), 21 → 0.9672 (two seed sets: 0.96755 / 0.96676), 35 → 0.9649:
+14 and 21 are equal, all history still costs ≈ 0.002 (≈ 0.005 without extra_trees); `xt_all` ranks 0.927 like xt but sits
+below the 0.9655 member bar. No readable route to 0.9700 remains in this architecture; Final 1 (0.96828) stands.
+
+**Round 15 (2026-10-19): third-member search closed.** `soof_xt` 0.996 and `xtA` 0.993 like xt (model-A changes converge
+onto xt once model B uses extra_trees; xtA has the best xt-family CV but is unreadable); `nbonly_xt` (neighbour columns only)
+fails the sanity gate (CV 0.874) and ranks 0.39 like xt. Only column-block structure gives an equally strong, different member.
+
+**Rounds 11–13 (2026-10-18, `plan_step11.md`, `plan_step12_dro.md`):** **`xt` (model B `extra_trees=True`) read 0.96678,
+the highest public score** (+0.0047 vs goof 5-seed, CV tied); replicate `xt_seedsBC` (seeds 5–14) is the next upload, then
+`xt_bag15` / `blocks_xt`. Its neighbourhood is mapped: 600 rounds 0.96363 (rejected), max_bin 63 (0.993) and 31 leaves (0.981,
+CV lower) unreadable; strongly regularised model B CV-lower, held. Group DRO over window steps (`two_stage(b_dro=...)`) closed
+before a build: model B scores every window step 0.978–1.000 even held out (τ² = 0, weights stay 1); step reweighting closed.
+
 ## Future implementation notes
 
 - Run scripts from anywhere as `.venv/bin/python src/families.py <name>` (also `src/probes.py`,
@@ -271,7 +422,8 @@ the PageRank self-score trap remain report material).
 
 | path | role |
 |---|---|
-| `final_model.ipynb` / `final_model_kaggle.ipynb` | **the submission notebooks** (local / Kaggle with GPU switch): self-contained, raw files → CSV for the current best model; rename to the student number for hand-in. Stay at the root: they write `submission.csv` here and check against `submissions/` |
+| `e1130084.ipynb` | **the hand-in notebook** (was `submission_notebook.ipynb`, renamed to the student number): report-structured (§2.1–2.3), self-contained, final model only, raw files → `submission.csv`, checks against `submissions/`; runs locally and on Kaggle (`USE_GPU`) |
+| `final_model.ipynb` / `final_model_kaggle.ipynb` | the variant notebooks (local / Kaggle with GPU switch): self-contained, raw files → CSV for the current best model, with `CONFIG` switches for variants (OOF protocol, xgb member). Stay at the root: they write `submission.csv` here and check against `submissions/` |
 | `submission.csv` | output of the last `final_model*.ipynb` run |
 | `src/families.py` | current campaign: reference recipe, windows, weights, two-stage, distinctness gate, ledger rows |
 | `src/probes.py` | step-4 probe factory (sub_07 reference; superseded) — `Data` class still used by `families.py` |
@@ -285,7 +437,8 @@ the PageRank self-score trap remain report material).
 | `notebooks/main.ipynb` | experiment notebook, sections 5–16 (steps 1–3), executed; its first code cell moves the kernel to the repo root and puts `src/` on the path. Steps 5–6 live in `src/families.py` + ledger |
 | `docs/results.md` | ledger of every file with CV and public score |
 | `docs/report_notes.md` | methodology and results write-up with every table; `docs/figures/` diagrams |
-| `docs/plans/plan_step1..10.md`, `plan_step10_sna.md` | step plans (`plan_step10.md` = the current round: variance, finals, report; `plan_step10_sna.md` = the Lecture 8 SNA mapping, homophily and community diagnostics, closed 2026-10-09) |
+| `docs/plans/plan_step1..11.md`, `plan_step10_sna.md` | step plans (`plan_step11.md` = the current round: the post-43 ordering campaign, floorsplice donors, pre-screen protocol; `plan_step10_sna.md` = the Lecture 8 SNA mapping, closed 2026-10-09) |
+| `src/post43_probes.py`, `src/post43_prescreen.py` | post-43 block probes (floor / ceiling / floorsplice / bag) and the offline low-rate-band pre-screen (ranker only) |
 | `docs/instructions.md` | competition reference |
 | `submissions/`, `artifacts/` | (gitignored) every CSV; CV tables, caches and `family_*.json` |
 | `AGENTS.md` | pointer to this file for other agents |

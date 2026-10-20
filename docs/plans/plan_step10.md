@@ -124,3 +124,60 @@ uses the period level about right; the period-level axis is closed in both direc
 `fam_bag15_levelamp50` is not uploaded. **The public search for this pipeline is over**: finals stand
 (`fam_B15_nbfeat_all_bag15` 0.96313 + `fam_B15_Aoof_random_bag10` 0.95970), the report takes the time to 2026-10-25,
 and one slot a day stays open for an information source from outside the 159 features and the labelled-only graph.
+
+## 2026-10-11: two slots (user decision) — the post-43 floor probe and the 30-seed bag
+
+**Slot 1, `fam_bag15_post43floor.csv`** (`src/post43_probes.py floor`): Final 1 with the whole post-43 block
+(steps 43–49, 43.6% of the test rows) ranked below every pre-43 row, order inside each block kept. Spearman 0.456
+vs Final 1. The complement of the two period-level readings above: the within-step rank *lifted* the block
+(−0.022) and the quarter-strength amplification pushed it down mildly (−0.0015); the floor pushes it down
+completely. Versus 0.96313 the reading is ≈ [n_f1·n_l2·(1 − A12) − n_f2·n_l1·A21] / (n_f·n_l):
+- within ±0.003 → the block holds (almost) no fraud that currently ranks above pre-43 licit rows; post-43 scorer
+  work cannot pay on the public board; the question is closed for good;
+- ≤ −0.003 → post-43 fraud exist and the current within-block order is worth something; the loss size is
+  proportional to their number. Then the floor becomes a *protocol*: keep pre-43 fixed, floor the block, swap in a
+  different post-43 scorer, and the score difference between two floored files reads the within-block ranking
+  quality of that scorer directly (the cross-block terms are held constant);
+- ≥ +0.003 → pre-43 fraud rows were sitting below post-43 licit rows; a re-ordering of Final 1 gains on the public
+  board, but as a pure post-processing of Final 1 it would be selected as a final only with care (private is 70%).
+
+**Slot 2, `fam_B15_nbfeat_all_bag30.csv`**: seeds 15–29 of the all-159 model (`B15_nbfeat_all_seedsD`, building)
+averaged with the 15-seed Final 1. Unreadable by construction (expected Spearman ≈ 0.999); uploaded so it can be
+selected as Final 1. Expected public score inside 0.9626–0.9632. If selected, `final_model*.ipynb` must be
+re-executed with `seeds=tuple(range(30))` (about twice the 15-seed run time).
+
+**Read 2026-10-11: `fam_bag15_post43floor` = 0.89203, −0.071 vs Final 1.** The post-43 block holds fraud, and Final 1
+ranks it above most pre-43 licit rows: that ordering is worth ≈ 0.07 of public AUC. Solving the floor identity with the
+model's pre-43 level (≈ 7%) gives ≈ 27–49 fraud rows among the ≈ 2,000 public post-43 rows (1.3–2.4%, depending on how
+well they already beat pre-43 licit rows), i.e. a real but low base rate: consistent with the within-step rank reading
+(lifting the whole block, 97% licit, lost 0.022). The within-block ordering term carries weight n_f2·n_l2/(n_f·n_l) ≈
+0.06–0.10, so a better post-43 ordering can be worth up to ≈ 0.01–0.02 on the public board, and the board's own noise on
+that term (≈ 35 positives) is ≈ 0.004: only large ordering changes are readable.
+
+Within the post-43 block every scored file orders the rows much like Final 1 (Spearman 0.84–0.96; most different:
+`sub_06` all-history 0.844, `sub_04` rank-normalised 0.845, `recent14_local` 0.853). The protocol
+(`src/post43_probes.py floorsplice <base> <candidate>`): pre-43 rows from Final 1, post-43 block floored with the
+candidate's order; the difference vs 0.89203 reads the candidate's within-block ranking quality alone. First candidate
+= `sub_06` (the broadest training distribution; the hypothesis is that the recent window, which wins pre-43, is not the
+best window for the shifted block). A positive reading would make the final file "Final 1 with the post-43 order
+replaced, mapped onto Final 1's post-43 value range" (the level stays, which the level probes showed is right).
+
+**Read 2026-10-11: `fam_B15_nbfeat_all_bag30` = 0.96307** (bag15 0.96313): the 30-seed bag is identical to the 15-seed bag
+on the public board. Seed variance is flat from 15 seeds on; the axis is closed. Final 1 stays `fam_B15_nbfeat_all_bag15`
+(the notebooks already reproduce it exactly); bag30 is on the board as a selectable equivalent and nothing more.
+
+## 2026-10-12: the transductive candidate — `B15_nbfeat_pseudo_pre43`
+
+The one information source never used: the test rows' own features from steps 36–42. `two_stage(b_pseudo_pre43=7)`:
+test rows of the first 7 test steps whose model-A score is confident (> 0.9 or < 0.02) join model B's training set with
+hard pseudo-labels (8,210 rows, 6.2% pseudo-fraud, on top of the 11,705 labelled window rows; single-seed dry run).
+Post-43 rows are never pseudo-labelled (their confident predictions are all licit). The recency principle pushed to its
+limit; the earlier pseudo-label file (`B15_pseudo_unlab`, −0.006) used unlabelled rows of the old window and added no recency.
+
+| file | CV 3-fold | hard | horizon | PR | Spearman vs reference | verdict |
+|---|---|---|---|---|---|---|
+| fam_B15_nbfeat_pseudo_pre43.csv | 0.9635 | 0.8968 | 0.8067 | 0.9089 | 0.959 (`fam_B15_nbfeat`) | passes the gate: slot 2 of 2026-10-12 |
+
+CV below the reference (0.9689), as for every recency / neighbour gain so far; above the 0.95 floor. Reading rule vs
+0.96069: ≥ +0.003 gain → the transductive axis opens (map the step count 36–38 / 36–42, the thresholds, and the same
+rows into model A's window); ≤ −0.003 loss → closed with a board reading; between → tie, the simpler file wins.

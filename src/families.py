@@ -82,6 +82,33 @@ BOARD = {
     "fam_B15_Aoof_random_bag10.csv": 0.95970,
     "fam_bag15_steprank.csv": 0.94124,
     "fam_bag15_levelamp25.csv": 0.96165,
+    "fam_bag15_post43floor.csv": 0.89203,
+    "fam_B15_nbfeat_all_bag30.csv": 0.96307,
+    "fam_B15_nbfeat_pseudo_pre43.csv": 0.95553,
+    "fam_post43floor_sub06.csv": 0.88509,
+    "fam_post43floor_lowrate.csv": 0.87796,
+    "fam_B15_nbfeat_all_goof.csv": 0.96209,
+    "fam_B15_nbfeat_all_goof_bag15.csv": 0.96310,
+    "fam_bag15_post43floorrev.csv": 0.83841,
+    "fam_B15_nbfeat_all_combo.csv": 0.96362,
+    "fam_B15_nbfeat_combo.csv": 0.95948,
+    "fam_B15_nbfeat_all_combo_bag15.csv": 0.96316,
+    "fam_B15_nbfeat_all_soof.csv": 0.96319,
+    "fam_B15_nbfeat_all_soof_bag15.csv": 0.96290,
+    "fam_B15_nbfeat_all_goof_blocks.csv": 0.96382,
+    "fam_B15_nbfeat_all_goof_blocks_bag15.csv": 0.96385,
+    "fam_blend_goof_blocks_bag15.csv": 0.96539,
+    "fam_B15_nbfeat_all_goof_xgb.csv": 0.96189,
+    "fam_blend3_goof_blocks_xgb_bag15.csv": 0.96532,
+    "fam_B15_nbfeat_all_goof_dropadv.csv": 0.95957,
+    "fam_B15_nbfeat_all_goof_xt.csv": 0.96678,
+    "fam_B15_nbfeat_all_goof_xt_r600.csv": 0.96363,
+    "fam_B15_nbfeat_all_goof_xt_seedsBC.csv": 0.96736,
+    "fam_B15_nbfeat_all_goof_blocks_xt.csv": 0.96630,
+    "fam_blend_B15_nbfeat_all_goof_xt_bag15_B15_nbfeat_all_goof_blocks_xt_bag15.csv": 0.96828,
+    "fam_B15_nbfeat_all_goof_xt_w21.csv": 0.96755,
+    "fam_B15_nbfeat_all_goof_xt_all.csv": 0.96486,
+    "fam_B15_nbfeat_all_goof_xt_w21_seedsBC.csv": 0.96676,
 }
 
 
@@ -115,6 +142,18 @@ def lgbm_recent(last_k: int, params: dict | None = None, n_estimators: int = 300
     return fit_predict
 
 
+def lgbm_steps(steps: tuple, params: dict | None = None, n_estimators: int = 300):
+    """sub_06 recipe trained only on the listed time steps (step 11, plan_step11.md: the
+    regime-matched post-43 splice donor trains on the low-fraud-rate steps, which the recency
+    window excludes entirely). Steps outside the training window a CV fold provides are
+    silently absent from that fold's fit."""
+    base = {**LGBM_PARAMS, **(params or {}), "n_estimators": n_estimators}
+    def fit_predict(Xtr, ytr, Xva, seed=0):
+        keep = np.isin(_TS[Xtr.index.to_numpy()], steps)
+        return lgb.LGBMClassifier(**{**base, "random_state": seed}).fit(Xtr[keep], np.asarray(ytr)[keep]).predict_proba(Xva)[:, 1]
+    return fit_predict
+
+
 def lgbm_recency_weighted(half_life: float, params: dict | None = None, n_estimators: int = 300):
     """sub_06 recipe with exponential sample weights 0.5 ** ((t_last - t) / half_life)."""
     base = {**LGBM_PARAMS, **(params or {}), "n_estimators": n_estimators}
@@ -125,6 +164,7 @@ def lgbm_recency_weighted(half_life: float, params: dict | None = None, n_estima
 
 
 _PHASE = "cv"   # run_family sets "final" before the fit on all rows; tells two-stage which rows Xva holds
+_DRO_LOG: list = []   # per-round Group DRO diagnostics (two_stage(b_dro=...)); run_family writes artifacts/dro_<name>.csv
 
 
 _COMM = None
@@ -168,7 +208,11 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
               nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_gnn_embed: bool = False,
-              nb_comm: bool = False):
+              nb_comm: bool = False, b_pseudo_pre43: int = 0, b_pseudo_post43_neg: bool = False,
+              nb_feat_scorew: bool = False, nb_feat_top1: bool = False, nb_extra_k: int = 0, nb_extra_stats: tuple = (), b_blocks: bool = False,
+              a_cols: str = "all", b_rsub: int = 0, b_rsub_frac: float = 0.5,
+              b_dro: float | None = None, b_dro_rho: float = 8.0, b_dro_ess: float = 0.65, b_dro_rounds: int = 3,
+              b_dro_risk: str = "group", b_nbonly: bool = False, b_blocks_inout: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -231,15 +275,44 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
     # where there is no neighbour). CV-rejected on the single-stage in step 1; never board-read.
     IMP_ORDER = list(pd.read_csv(ARTIFACTS / "lgbm_importance_raw_1to28.csv", index_col=0).index) if nb_feats else []
 
-    def feat_agg(tx_rows: np.ndarray, sc_index: pd.Index, vals: pd.DataFrame) -> pd.DataFrame:
+    def feat_agg(tx_rows: np.ndarray, sc_index: pd.Index, vals: pd.DataFrame, stats: tuple | None = None) -> pd.DataFrame:
         """Mean of `vals` (indexed by txId) over predecessors and successors of tx_rows, edges
         restricted to nodes in `sc_index`."""
         e = edges[edges.txId1.isin(sc_index) & edges.txId2.isin(sc_index)]
         parts = []
         for side, src, dst in (("in", e.txId1, e.txId2), ("out", e.txId2, e.txId1)):
             g = vals.reindex(src).set_axis(dst.to_numpy()).groupby(level=0)
-            for stat in nb_feat_stats:                      # "mean" (default), optionally "max" / "min" / "std"
+            for stat in (stats or nb_feat_stats):           # "mean" (default), optionally "max" / "min" / "std"
                 parts.append(g.agg(stat).reindex(tx_rows).add_prefix(f"nbf_{side}_{stat}_"))
+        return pd.concat(parts, axis=1).reset_index(drop=True)
+
+    def feat_agg_scorew(tx_rows: np.ndarray, sc: pd.Series, vals: pd.DataFrame) -> pd.DataFrame:
+        """Step 11 (plan_step11.md, 2026-10-13): score-weighted mean of `vals` over predecessors and
+        successors, weights = the neighbour's model-A score: sum(s_j * x_j) / sum(s_j). Answers
+        "what do the *suspicious* neighbours look like" where the unweighted mean answers "what do
+        neighbours look like" — a ratio of sums over a variable neighbour set, which the trees
+        cannot form from the existing columns. Same labelled-only neighbour set as everything else."""
+        e = edges[edges.txId1.isin(sc.index) & edges.txId2.isin(sc.index)]
+        parts = []
+        for side, src, dst in (("in", e.txId1, e.txId2), ("out", e.txId2, e.txId1)):
+            w = sc.reindex(src).to_numpy()
+            num = pd.DataFrame(vals.reindex(src).to_numpy() * w[:, None], columns=vals.columns,
+                               index=dst.to_numpy()).groupby(level=0).sum()
+            den = pd.Series(w, index=dst.to_numpy()).groupby(level=0).sum().replace(0, np.nan)
+            parts.append(num.div(den, axis=0).reindex(tx_rows).add_prefix(f"nbf_{side}_wmean_"))
+        return pd.concat(parts, axis=1).reset_index(drop=True)
+
+    def feat_agg_top1(tx_rows: np.ndarray, sc: pd.Series, vals: pd.DataFrame) -> pd.DataFrame:
+        """Step 11: the raw features of the single highest-scoring predecessor and successor (the
+        most suspicious neighbour's profile). A selection, not an aggregate: per-feature max was
+        unreadable, the argmax-neighbour's vector was never tried. Ties break deterministically."""
+        e = edges[edges.txId1.isin(sc.index) & edges.txId2.isin(sc.index)]
+        parts = []
+        for side, src, dst in (("in", e.txId1, e.txId2), ("out", e.txId2, e.txId1)):
+            df = pd.DataFrame({"dst": dst.to_numpy(), "s": sc.reindex(src).to_numpy(), "src": src.to_numpy()})
+            best = df.sort_values("s", kind="stable").groupby("dst").src.last()
+            prof = vals.reindex(best.to_numpy()).set_axis(best.index)
+            parts.append(prof.reindex(tx_rows).add_prefix(f"nbf_{side}_top1_"))
         return pd.concat(parts, axis=1).reset_index(drop=True)
 
     def fit_B(A_df, y_win, t_win, w, seed):
@@ -312,22 +385,48 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             assert nb_feats and not (unlab or b_pseudo_unlab or a_extra_hist), "nb_feats_into_A: unsupported combination"
             _tx_tr = L_tx[Xtr.index.to_numpy()]
             _tx_va = T_tx[Xva.index.to_numpy()] if _PHASE == "final" else L_tx[Xva.index.to_numpy()]
-            _nbf = [c for c in IMP_ORDER if c in Xtr.columns][:nb_feats]
+            _nbf = [c for c in IMP_ORDER if c in Xtr.columns][:nb_extra_k or nb_feats]
             _v_tr = pd.DataFrame(Xtr[_nbf].to_numpy(), index=_tx_tr, columns=_nbf)[win]
             _v_va = pd.DataFrame(Xva[_nbf].to_numpy(), index=_tx_va, columns=_nbf)
             Xa_tr = pd.concat([Xtr.reset_index(drop=True), feat_agg(_tx_tr, _v_tr.index, _v_tr)], axis=1).set_index(Xtr.index)
             Xa_va = pd.concat([Xva.reset_index(drop=True), feat_agg(_tx_va, _v_va.index, _v_va)], axis=1).set_index(Xva.index)
-        if a_oof == "random":
+        if a_cols == "local":
+            # step 11 round 9 (2026-10-17): model A sees the local block only, so the six neighbour numbers come
+            # from a different scorer while model B keeps all columns (a blend member with different inputs)
+            loc_a = [c for c in Xa_tr.columns if c in set(d.LOCAL)]
+            Xa_tr, Xa_va = Xa_tr[loc_a], Xa_va[loc_a]
+        if a_oof in ("random", "group", "step"):
             # 5-fold random out-of-fold scoring within the window: each row scored by a model that
             # saw the other 4/5 of the window (same periods), the way test rows are scored by a
             # model that knows their period
-            from sklearn.model_selection import StratifiedKFold
+            from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
             idx_w = np.flatnonzero(win)
             fold_models = []
             # optional: rows from the a_extra_hist steps just before the window are added to every
             # fold scorer's training data (never scored themselves): stronger scorers, same targets
             extra = np.flatnonzero((~win) & (t >= t.max() - (last_k - 1) - a_extra_hist)) if a_extra_hist else np.array([], dtype=int)
-            for tr_i, va_i in StratifiedKFold(oof_folds, shuffle=True, random_state=seed).split(idx_w, ytr[idx_w]):
+            if a_oof == "group":
+                # step 11 round 3 (plan_step11.md): under random folds the scorer of neighbour j saw
+                # row i (label included) 80% of the time, so i's neighbour numbers carry a dose of
+                # its own label (nb_out_mean AUC 0.902 random vs 0.889 grouped, 2026-10-13); test
+                # scorers never saw a test label. Folds by connected component of the labelled
+                # window subgraph: no scorer of j has seen any neighbour of j. Same period kept.
+                import scipy.sparse as sp
+                from scipy.sparse.csgraph import connected_components
+                tx_w = L_tx[Xtr.index.to_numpy()[idx_w]]; pos = pd.Series(np.arange(len(idx_w)), index=tx_w)
+                e_w = edges[edges.txId1.isin(pos.index) & edges.txId2.isin(pos.index)]
+                adj = sp.coo_matrix((np.ones(len(e_w)), (pos[e_w.txId1].to_numpy(), pos[e_w.txId2].to_numpy())), shape=(len(idx_w),) * 2)
+                groups = connected_components(adj, directed=False)[1]
+                splits = StratifiedGroupKFold(oof_folds, shuffle=True, random_state=seed).split(idx_w, ytr[idx_w], groups)
+            elif a_oof == "step":
+                # step 11 round 5: leave-one-step-out within the window — each step scored by a model on
+                # the other 13 window steps (before and after it): like the test scorer it never saw the
+                # row's period and has ~the same data; no leak, since edges never cross steps
+                tw = t[idx_w]
+                splits = [(np.flatnonzero(tw != s_), np.flatnonzero(tw == s_)) for s_ in np.unique(tw)]
+            else:
+                splits = StratifiedKFold(oof_folds, shuffle=True, random_state=seed).split(idx_w, ytr[idx_w])
+            for tr_i, va_i in splits:
                 a_i, b_i = np.r_[idx_w[tr_i], extra], idx_w[va_i]
                 m_f = model(seed).fit(Xa_tr.iloc[a_i], ytr[a_i]); fold_models.append(m_f)
                 pA[b_i] = m_f.predict_proba(Xa_tr.iloc[b_i])[:, 1]
@@ -351,7 +450,7 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
         sc_tr = pd.Series(pA, index=tx_tr); sc_tr = sc_tr[sc_tr.notna()]
         if unlab and scored:
             sc_tr = pd.concat([sc_tr, pd.Series(scored)])
-        if a_test_from_folds and a_oof == "random":
+        if a_test_from_folds and a_oof in ("random", "group", "step"):
             # test / validation rows scored by the average of the OOF fold models, so they are
             # scored by the same kind of model (trained on (k-1)/k of the window) as the training rows
             pA_va = np.mean([m_f.predict_proba(Xa_va)[:, 1] for m_f in fold_models], axis=0)
@@ -384,13 +483,26 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
                         h = feat_agg(tx_, sc_.index, full[cols])          # mean over neighbours of their own side-means
                         for c in nbf:
                             F_[f"nbf_h2_{side}_{c}"] = h[f"nbf_{side}_mean_nbf_{side}_mean_{c}"].to_numpy()
+            # step 11 round 4 (combined candidate): the extras below may use only the first
+            # nb_extra_k features (step-1 gain order) while the means cover all nb_feats
+            nbx = nbf[:nb_extra_k] if nb_extra_k else nbf
+            vx_tr, vx_va = vals_tr[nbx], vals_va[nbx]
+            if nb_extra_stats:
+                Ftr = pd.concat([Ftr, feat_agg(tx_tr, sc_tr.index, vx_tr, nb_extra_stats)], axis=1)
+                Fva = pd.concat([Fva, feat_agg(tx_va, sc_va.index, vx_va, nb_extra_stats)], axis=1)
             if nb_feat_delta:
                 # the row's own value minus its neighbours' mean: a difference trees cannot form from
                 # two columns with a few splits (blank where there is no neighbour)
                 for side in ("in", "out"):
-                    for c in nbf:
+                    for c in nbx:
                         Ftr[f"nbf_{side}_delta_{c}"] = Xtr[c].to_numpy() - Ftr[f"nbf_{side}_mean_{c}"].to_numpy()
                         Fva[f"nbf_{side}_delta_{c}"] = Xva[c].to_numpy() - Fva[f"nbf_{side}_mean_{c}"].to_numpy()
+            if nb_feat_scorew:
+                Ftr = pd.concat([Ftr, feat_agg_scorew(tx_tr, sc_tr, vx_tr)], axis=1)
+                Fva = pd.concat([Fva, feat_agg_scorew(tx_va, sc_va, vx_va)], axis=1)
+            if nb_feat_top1:
+                Ftr = pd.concat([Ftr, feat_agg_top1(tx_tr, sc_tr, vx_tr)], axis=1)
+                Fva = pd.concat([Fva, feat_agg_top1(tx_va, sc_va, vx_va)], axis=1)
         if nb_comm:
             comm = communities(edges, pd.concat([d.train.set_index("txId")["time_step"], d.test.set_index("txId")["time_step"]]))
 
@@ -438,6 +550,64 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             # the large steps (22: 1,763 rows) stop dominating the small ones (27: 206 rows)
             cnt = pd.Series(tB).map(pd.Series(tB).value_counts()).to_numpy()
             wB = len(tB) / (np.unique(tB).size * cnt)
+        if b_dro is not None:
+            # step 12 (docs/plans/plan_step12_dro.md): Group DRO over the window steps. Each round scores the
+            # window rows out-of-fold with model B (folds grouped by connected component, as a_oof="group"),
+            # takes each step's risk 1 - AUC, shrinks it toward the mean by its Hanley-McNeil standard error
+            # (empirical Bayes), and multiplies the step's row weight by exp(eta * standardised risk).
+            # Row-weight ratio capped at b_dro_rho, ESS kept >= b_dro_ess; b_dro=0.0 runs the loop with no
+            # update (wiring check: must equal the unweighted model).
+            assert a_oof == "group" and not (b_pseudo_unlab or b_pseudo_pre43 or b_pseudo_post43_neg or b_stack_logreg or b_rank), \
+                "b_dro: needs a_oof='group' and no extra model-B rows / columns"
+            from sklearn.metrics import roc_auc_score
+            from sklearn.model_selection import StratifiedGroupKFold as _SGKF
+            steps_ = np.unique(tB); g_ix = np.searchsorted(steps_, tB)
+            n_g = np.bincount(g_ix); p_g = np.bincount(g_ix, weights=yB).astype(int)
+            w0 = np.ones(len(yB)) if wB is None else np.asarray(wB, float)
+            mult = np.ones(len(steps_))
+            if b_dro_risk == "step":
+                # plan_step12_dro.md §11: leave-one-step-out — each window step scored by model B trained on the
+                # other 13 steps, so a step's risk measures transfer to an unseen period (in-window grouped folds
+                # scored every step ~0.98-1.0 and found no between-step spread beyond noise)
+                folds_ = [(np.flatnonzero(g_ix != k), np.flatnonzero(g_ix == k)) for k in range(len(steps_))]
+            else:
+                folds_ = list(_SGKF(5, shuffle=True, random_state=seed).split(np.zeros(len(yB)), yB, groups))
+
+            def _ess(w):
+                return w.sum() ** 2 / (w ** 2).sum() / len(w)
+
+            for r_ in range(b_dro_rounds + 1):
+                w_cur = w0 * mult[g_ix]
+                oof = np.full(len(yB), np.nan)
+                for tr_i, va_i in folds_:
+                    oof[va_i] = fit_B(A.iloc[tr_i], yB[tr_i], tB[tr_i], w_cur[tr_i], seed).predict_proba(A.iloc[va_i])[:, 1]
+                auc_g = np.array([roc_auc_score(yB[g_ix == k], oof[g_ix == k]) if 0 < p_g[k] < n_g[k] else np.nan
+                                  for k in range(len(steps_))])
+                a_ = np.clip(np.nan_to_num(auc_g, nan=np.nanmean(auc_g)), 1e-3, 1 - 1e-3)
+                q1, q2 = a_ / (2 - a_), 2 * a_ ** 2 / (1 + a_)
+                n_neg = np.maximum(n_g - p_g, 1); n_pos = np.maximum(p_g, 1)
+                se = np.sqrt((a_ * (1 - a_) + (n_pos - 1) * (q1 - a_ ** 2) + (n_neg - 1) * (q2 - a_ ** 2)) / (n_pos * n_neg))
+                R = 1 - a_; R_bar = R.mean()
+                tau2 = max(0.0, R.var() - (se ** 2).mean())
+                R_s = R_bar + tau2 / (tau2 + se ** 2) * (R - R_bar) if tau2 > 0 else np.full_like(R, R_bar)
+                _DRO_LOG.extend(dict(phase=_PHASE, seed=seed, t_max=int(t.max()), round=r_, step=int(s_), n=int(n_g[k]),
+                                     pos=int(p_g[k]), auc=auc_g[k], se=se[k], risk_shrunk=R_s[k], mult=mult[k],
+                                     ess=_ess(w_cur), tau2=tau2) for k, s_ in enumerate(steps_))
+                print(f"    DRO[{b_dro_risk}] {_PHASE} seed {seed} round {r_}: pooled OOF AUC {roc_auc_score(yB, oof):.4f}, "
+                      f"worst step {steps_[np.nanargmin(auc_g)]} ({np.nanmin(auc_g):.3f}), tau2 {tau2:.2e}, "
+                      f"max/min weight {mult.max() / mult.min():.2f}, ESS {_ess(w_cur):.3f}", flush=True)
+                if r_ == b_dro_rounds or tau2 == 0 or not b_dro:
+                    break                                      # last round measured only; no update past it
+                z = (R_s - R_s.mean()) / R_s.std()
+                new = mult * np.exp(b_dro * z)
+                lg = np.log(new); mid = (lg.max() + lg.min()) / 2
+                new = np.exp(np.clip(lg - mid, -np.log(b_dro_rho) / 2, np.log(b_dro_rho) / 2))
+                new /= np.average(new, weights=n_g)            # mean row weight 1
+                if _ess(w0 * new[g_ix]) < b_dro_ess:
+                    print(f"    DRO: round {r_ + 1} would take ESS below {b_dro_ess}: stopped", flush=True)
+                    break
+                mult = new
+            wB = w0 * mult[g_ix]
         if b_stack_logreg:
             # one extra column for model B: a logistic-regression score on the raw features,
             # random OOF within the window for training rows, full-window fit for the rows to predict
@@ -470,6 +640,55 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             if b_stack_logreg: AU = AU.assign(lr_score=lr().fit(Xw, yw).predict_proba(XU[keep_u])[:, 1])
             A = pd.concat([A, AU[A.columns]], ignore_index=True); yB = np.r_[yB, (pu[keep_u] > 0.5).astype(int)]
             tB = np.r_[tB, U_ts[m_u][keep_u]]; wB = None if wB is None else np.r_[wB, np.ones(keep_u.sum())]
+        if b_pseudo_pre43:
+            # step 10 (plan_step10.md, 2026-10-12): the rows to predict from the first `b_pseudo_pre43` steps of
+            # the prediction period (test: 36-42, where the model's ordering is good and both classes are
+            # confidently predicted) join model B's training set with hard pseudo-labels from model A when it is
+            # confident (> 0.9 or < 0.02). Transductive: their features only, never a label. Their model-B
+            # columns are the ones already built for them (B), so column order is untouched. The recency
+            # principle pushed to its limit: training rows from inside the test period. Post-43 rows are
+            # never pseudo-labelled (their confident predictions are all licit: plan_step8 diagnostics).
+            early = ts_va <= ts_va.min() + (b_pseudo_pre43 - 1)
+            keep_p = early & ((pA_va > 0.9) | (pA_va < 0.02))
+            A = pd.concat([A, B[keep_p]], ignore_index=True); yB = np.r_[yB, (pA_va[keep_p] > 0.5).astype(int)]
+            tB = np.r_[tB, ts_va[keep_p]]; wB = None if wB is None else np.r_[wB, np.ones(keep_p.sum())]
+        if b_pseudo_post43_neg:
+            # step 11 (plan_step11.md, 2026-10-13): the confidently licit-scored post-43 rows join model B's
+            # training set as pseudo-label-0 rows (their model-B columns are the ones already built in B),
+            # teaching model B what post-43 licit looks like so the block's residual order sharpens. In CV
+            # no validation step reaches 43, so the flag is a no-op there (CV = the parent's CV). Read
+            # through the floorsplice only (the full file perturbs model B too little to pass the gate).
+            keep_n = (ts_va >= 43) & (pA_va < 0.02)
+            A = pd.concat([A, B[keep_n]], ignore_index=True); yB = np.r_[yB, np.zeros(int(keep_n.sum()), int)]
+            tB = np.r_[tB, ts_va[keep_n]]; wB = None if wB is None else np.r_[wB, np.ones(keep_n.sum())]
+        if b_nbonly:
+            # round 15 (plan_step11.md): model B sees the neighbour columns only (6 score numbers + neighbour feature
+            # means), no raw features of the row itself: the one column view the blocks member never fits alone
+            nbc = [c for c in A.columns if c not in set(Xtr_b.columns)]
+            A, B = A[nbc], B[nbc]
+        if b_blocks_inout:
+            # round 16 (plan_step11.md): block ensemble split by money direction — model B fitted on all columns, on the
+            # raw columns + the in-neighbour columns (who paid into the row), and on the raw columns + the out-neighbour
+            # columns (whom it paid); probabilities averaged. Column order inside each block is kept.
+            raw_b = set(Xtr_b.columns)
+            side = lambda c, d: c.startswith((f"nb_{d}_", f"nbf_{d}_"))
+            blocks = [list(A.columns), [c for c in A.columns if c in raw_b or side(c, "in")],
+                      [c for c in A.columns if c in raw_b or side(c, "out")]]
+            return np.mean([fit_B(A[cols], yB, tB, wB, seed).predict_proba(B[cols])[:, 1] for cols in blocks], axis=0)
+        if b_blocks:
+            # step 11 round 6 (2026-10-15): feature-block ensemble — model B fitted three times, on all
+            # columns, on the local raw block + the neighbour columns, and on the aggregated raw block + the
+            # neighbour columns; probabilities averaged. Column order inside each block is kept.
+            loc = set(d.LOCAL); raw_b = list(Xtr_b.columns); nb_b = [c for c in A.columns if c not in set(raw_b)]
+            blocks = [list(A.columns), [c for c in raw_b if c in loc] + nb_b, [c for c in raw_b if c not in loc] + nb_b]
+            return np.mean([fit_B(A[cols], yB, tB, wB, seed).predict_proba(B[cols])[:, 1] for cols in blocks], axis=0)
+        if b_rsub:
+            # step 11 round 9: random-subspace model B — b_rsub fits, each on a random b_rsub_frac of the raw columns
+            # (original order kept) + every neighbour column, averaged; the subsets are drawn from the seed
+            raw_b = list(Xtr_b.columns); nb_b = [c for c in A.columns if c not in set(raw_b)]
+            rng = np.random.default_rng(1000 + seed); k_raw = int(round(b_rsub_frac * len(raw_b)))
+            subsets = [[c for c in raw_b if c in set(rng.choice(raw_b, k_raw, replace=False))] + nb_b for _ in range(b_rsub)]
+            return np.mean([fit_B(A[cols], yB, tB, wB, seed).predict_proba(B[cols])[:, 1] for cols in subsets], axis=0)
         mB = fit_B(A, yB, tB, wB, seed)
         pB = mB.predict(B) if b_rank else mB.predict_proba(B.fillna(-1) if b_learner == "et" else B)[:, 1]
         if b_rank:
@@ -538,6 +757,15 @@ def two_stage_iter2(last_k: int = 14, params: dict | None = None, n_estimators: 
 
 B15_PARAMS = {"num_leaves": 15, "min_child_samples": 40, "colsample_bytree": 0.6, "subsample": 1.0, "subsample_freq": 1, "reg_lambda": 1.0, "reg_alpha": 0.0, "learning_rate": 0.05}
 BAG5, BAG3 = (0, 1, 2, 3, 4), (0, 1, 2)
+# step 11 round 10 (2026-10-18): drift-aware column removal (dropped from the raw block and, through
+# Xtr.columns, from the neighbour-mean block too). ADV = single-feature adversarial AUC train vs test
+# > 0.85 after the six period identifiers (artifacts/single_feature_adversarial_auc_raw.csv; label-free).
+# UNSTABLE = pooled window AUC (steps 22-35) at least 0.05 from 0.5 but per-step direction opposite to
+# the pooled one in >= 3 of the 14 window steps (selected on window labels: its CV is optimistic).
+DRIFT_ADV = ["feat_2", "feat_106", "feat_107", "feat_109", "feat_142"]
+DRIFT_UNSTABLE = ["feat_22", "feat_28", "feat_3", "feat_82", "feat_20", "feat_65", "feat_59", "feat_21", "feat_112",
+                  "feat_93", "feat_92", "feat_80", "feat_81", "feat_118", "feat_67", "feat_61", "feat_134", "feat_77",
+                  "feat_135", "feat_86", "feat_1", "feat_87", "feat_113"]
 # name: (description, feature set, fit_predict, final seeds); "clean" = 159 columns without
 # the six period identifiers, "all" = the 165 raw columns
 FAMILIES = {
@@ -657,6 +885,10 @@ FAMILIES = {
     # step 10 (docs/plans/plan_step10.md): variance reduction for the finals — more seeds of the two finals models
     "B15_nbfeat_all_seedsC": ("B15 two-stage, random OOF, means of all 159 features over labelled neighbours, seeds 10-14 (third 5-seed bag for the 15-seed finals file)", "clean",
                               two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), (10, 11, 12, 13, 14)),
+    "B15_nbfeat_pseudo_pre43": ("B15 two-stage, random OOF, top-10 neighbour feature means, + the confidently scored test rows of steps 36-42 as pseudo-labelled model-B training rows (transductive; post-43 rows never pseudo-labelled), bagged x5", "clean",
+                                two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_pseudo_pre43=7), BAG5),
+    "B15_nbfeat_all_seedsD": ("B15 two-stage, random OOF, means of all 159 features over labelled neighbours, seeds 15-29 (15 more seeds for the 30-seed finals file)", "clean",
+                              two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=159), tuple(range(15, 30))),
     "B15_Aoof_random_seedsB": ("B15 two-stage with random 5-fold OOF scoring, seeds 5-9 (second 5-seed bag for the 10-seed Final 2)", "clean",
                                two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random"), (5, 6, 7, 8, 9)),
     "B15_nbfeat_stepbal": ("B15 two-stage, random OOF, top-10 neighbour feature means, model B with per-step balanced row weights (each window step carries equal total weight), bagged x5", "clean",
@@ -668,6 +900,121 @@ FAMILIES = {
     # step 10 (docs/plans/plan_step10.md, Lecture 8 SNA): the community as the neighbourhood unit
     "B15_nbfeat_comm": ("B15 two-stage, random OOF, top-10 neighbour feature means + mean/max/count of model-A scores over the other scored rows of the row's Louvain community (3 model-B columns), bagged x5", "clean",
                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_comm=True), BAG5),
+    # step 11, round 2 (user-approved 2026-10-13): two kind-changes on the closed neighbour-feature
+    # axis, gate-only (a pass takes slot 2 behind the floorrev calibration; failures close the axis)
+    "B15_nbfeat_scorew": ("B15 two-stage, random OOF, top-10 neighbour feature means + their score-weighted means (each neighbour's features weighted by its model-A score: the suspicious-neighbour profile, 20 extra model-B columns), bagged x5", "clean",
+                          two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_scorew=True), BAG5),
+    "B15_nbfeat_top1": ("B15 two-stage, random OOF, top-10 neighbour feature means + the raw features of the single highest-scoring in- and out-neighbour (the most suspicious neighbour's profile, 20 extra model-B columns), bagged x5", "clean",
+                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, nb_feat_top1=True), BAG5),
+    "B15_nbfeat_pseudo_p43neg": ("B15 two-stage, random OOF, top-10 neighbour feature means, + the confidently licit-scored post-43 test rows as pseudo-label-0 model-B training rows (transductive negatives; CV is a no-op for the flag; post-43 splice donor), bagged x5", "clean",
+                                 two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="random", nb_feats=10, b_pseudo_post43_neg=True), BAG5),
+    # step 11, round 3 (user-approved 2026-10-13): the training-row scorer's label leak through
+    # neighbours — OOF folds grouped by connected component of the labelled window subgraph
+    "B15_nbfeat_goof": ("B15 two-stage, top-10 neighbour feature means, model-A OOF folds grouped by connected component of the labelled window subgraph (no scorer of a neighbour saw the row's label), bagged x5", "clean",
+                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=10), BAG5),
+    "B15_nbfeat_all_goof": ("B15 two-stage, means of all 159 features over labelled neighbours, model-A OOF folds grouped by connected component of the labelled window subgraph, bagged x5", "clean",
+                            two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # step 11 round 4 (2026-10-14): every CV-positive gate-failed change stacked into one model —
+    # grouped OOF + neighbour means into model A + max / delta / argmax-neighbour profile of the
+    # top-10 features + the step's mean model-A score; each alone was unreadable (0.988-0.994)
+    "B15_nbfeat_combo": ("B15 two-stage, top-10 neighbour feature means, grouped OOF + top-10 means into model A + max, delta and argmax-neighbour profile of the top-10 + step-mean model-A score (all CV-positive single changes stacked), bagged x5", "clean",
+                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=10, nb_feats_into_A=True,
+                                   nb_extra_stats=("max",), nb_feat_delta=True, nb_feat_top1=True, step_ctx=True), BAG5),
+    "B15_nbfeat_all_combo": ("B15 two-stage, means of all 159 features over labelled neighbours, grouped OOF + top-10 means into model A + max, delta and argmax-neighbour profile of the top-10 + step-mean model-A score, bagged x5", "clean",
+                             two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, nb_extra_k=10, nb_feats_into_A=True,
+                                       nb_extra_stats=("max",), nb_feat_delta=True, nb_feat_top1=True, step_ctx=True), BAG5),
+    # step 11 round 5 (2026-10-14): leave-one-step-out OOF scoring of training rows (period-blind, data-matched)
+    "B15_nbfeat_all_soof": ("B15 two-stage, means of all 159 features over labelled neighbours, model-A OOF leave-one-step-out within the window (scorer never saw the row's period, like the test scorer; no neighbour leak), bagged x5", "clean",
+                            two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="step", nb_feats=159), BAG5),
+    # step 11 round 6 (2026-10-15): one model-B change each on Final 1 (fam_B15_nbfeat_all_goof_bag15, 0.96310)
+    "B15_nbfeat_all_goof_col10": ("B15 two-stage, all-159 neighbour means, grouped OOF, model B colsample_bytree 1.0 (every tree sees the six neighbour-score numbers), bagged x5", "clean",
+                                  two_stage(14, b_params={**B15_PARAMS, "colsample_bytree": 1.0}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_dart": ("B15 two-stage, all-159 neighbour means, grouped OOF, model B with DART boosting (drop rate 0.1), bagged x5", "clean",
+                                 two_stage(14, b_params={**B15_PARAMS, "boosting_type": "dart", "drop_rate": 0.1}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_blocks": ("B15 two-stage, all-159 neighbour means, grouped OOF, model B = average of three fits: all columns / local raw block + neighbour columns / aggregated raw block + neighbour columns, bagged x5", "clean",
+                                   two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), BAG5),
+    # step 11 round 7 (2026-10-16): learner diversity for the blend — XGBoost as model B on Final 1's inputs
+    # (on the older base it ranked 0.944 like the LightGBM model B at -0.002 public: the block model's profile)
+    "B15_nbfeat_all_goof_xgb": ("B15 two-stage inputs (all-159 neighbour means, grouped OOF), model B = XGBoost depth 4, 300 rounds, lr 0.05, 60% columns (blend member), bagged x5", "clean",
+                                two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, b_learner="xgb"), BAG5),
+    "B15_nbfeat_all_goof_xgb_seedsBC": ("B15_nbfeat_all_goof_xgb, seeds 5-14 (seed check and the 15-seed bag fam_B15_nbfeat_all_goof_xgb_bag15)", "clean",
+                                        two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, b_learner="xgb"), tuple(range(5, 15))),
+    # step 11 round 9 (2026-10-17): two new blend members, each read alone first (join if < 0.95 like every
+    # member and >= 0.962 alone)
+    "B15_nbfeat_all_goof_localA": ("Final 1 inputs, but model A trained on the local block (feat_1-93) only: different neighbour scores; model B = LightGBM on all columns, grouped OOF, bagged x5", "clean",
+                                   two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, a_cols="local"), BAG5),
+    "B15_nbfeat_all_goof_rsub": ("Final 1 inputs, model B = mean of 5 LightGBM fits, each on a random half of the 159 raw columns + all neighbour columns (random-subspace views), grouped OOF, bagged x5", "clean",
+                                 two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, b_rsub=5), BAG5),
+    # step 11 round 10 (2026-10-18, user-approved): drift-aware feature removal on the goof model (one change each)
+    "B15_nbfeat_all_goof_dropadv": ("Final 1 member (goof) without the 5 drifting columns with adversarial AUC > 0.85 (feat_2, 106, 107, 109, 142), raw and neighbour means, bagged x5", "clean_noadv",
+                                    two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_dropunstable": ("Final 1 member (goof) without the 23 columns whose per-step direction reverses in >= 3 of 14 window steps, raw and neighbour means, bagged x5", "clean_stable",
+                                         two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # step 11 round 11 (2026-10-18, user-approved): one model-B hyperparameter change each on goof, as blend-member
+    # candidates (join rule of round 9: < 0.95 like each member and >= 0.962 alone)
+    "B15_nbfeat_all_goof_xt": ("Final 1 member (goof) with model B = LightGBM extra_trees=True (random split thresholds), bagged x5", "clean",
+                               two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # step 11 round 12 (2026-10-18): xt read 0.96678 (+0.0047 vs goof 5-seed, highest public); build on it
+    "B15_nbfeat_all_goof_xt_seedsBC": ("B15_nbfeat_all_goof_xt, seeds 5-14 (seed check of its CV and the 15-seed bag fam_B15_nbfeat_all_goof_xt_bag15)", "clean",
+                                       two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt": ("block-ensemble model B (all / local+nb / aggregated+nb) with extra_trees=True: the blend partner rebuilt on the xt recipe, grouped OOF, bagged x5", "clean",
+                                      two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), BAG5),
+    "B15_nbfeat_all_goof_xt_r600": ("B15_nbfeat_all_goof_xt with 600 model-B rounds (random thresholds make each tree weaker), bagged x5", "clean",
+                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=600, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_bin63": ("B15_nbfeat_all_goof_xt with max_bin 63 (coarser candidate thresholds on top of the random choice), bagged x5", "clean",
+                                     two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "max_bin": 63}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_L31": ("B15_nbfeat_all_goof_xt with 31 model-B leaves (random splits may move the depth optimum), bagged x5", "clean",
+                                   two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "num_leaves": 31}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # round 14 (2026-10-19, plan_step11.md): randomised blend members on the confirmed xt recipe (join if < 0.95 like
+    # each member and >= 0.962 alone)
+    "B15_nbfeat_all_goof_xt_rsub": ("xt with random-subspace model B: mean of 5 extra_trees fits, each on a random half of the 159 raw columns + all neighbour columns, bagged x5", "clean",
+                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_rsub=5), BAG5),
+    "B15_nbfeat_all_goof_xt_col04": ("xt with model B colsample_bytree 0.4 (each tree sees 40% of the columns), bagged x5", "clean",
+                                     two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "colsample_bytree": 0.4}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_seedsBC": ("B15_nbfeat_all_goof_blocks_xt, seeds 5-14 (for the 15-seed bag fam_B15_nbfeat_all_goof_blocks_xt_bag15 and the xt + blocks_xt blend)", "clean",
+                                              two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), tuple(range(5, 15))),
+    # round 15 (2026-10-19, user-approved, plan_step11.md): third-member search for the xt + blocks_xt blend; joins only
+    # if >= 0.9655 alone and < 0.95 like both members
+    "B15_nbfeat_all_soof_xt": ("xt with leave-one-step-out model-A OOF (the soof protocol) + extra_trees model B, bagged x5", "clean",
+                               two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="step", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_nbonly_xt": ("model B (extra_trees) on the neighbour columns only: 6 score numbers + 318 neighbour feature means, no raw features, grouped OOF, bagged x5", "clean",
+                                      two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_nbonly=True), BAG5),
+    "B15_nbfeat_all_goof_xtA": ("xt with extra_trees in model A as well (the neighbour scores change), grouped OOF, bagged x5", "clean",
+                                two_stage(14, params={"extra_trees": True}, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # round 16 (2026-10-19, user-approved, plan_step11.md): routes to 0.9700
+    "B15_nbfeat_all_goof_xt_w21": ("xt with a 21-step training window (steps 15-35): does extra_trees change the window optimum?, bagged x5", "clean",
+                                   two_stage(21, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_inout_xt": ("block ensemble by money direction with extra_trees: mean of model-B fits on all / raw + in-neighbour / raw + out-neighbour columns, grouped OOF, bagged x5", "clean",
+                                     two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks_inout=True), BAG5),
+    # round 17 (2026-10-20, user-approved): longer windows under extra_trees as a third blend member (21 steps tied xt,
+    # so the long-window penalty is gone; more history may rank differently at equal strength). Joins if >= 0.9655 alone
+    # and < 0.95 like both xt and blocks_xt
+    "B15_nbfeat_all_goof_xt_w28": ("xt with a 28-step training window (steps 8-35), bagged x5", "clean",
+                                   two_stage(28, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_w21_seedsBC": ("B15_nbfeat_all_goof_xt_w21, seeds 5-14 (replicate of the 0.96755 reading, no shared seed; with it the 15-seed bag fam_B15_nbfeat_all_goof_xt_w21_bag15)", "clean",
+                                           two_stage(21, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_xt_all": ("xt trained on all 35 training steps, bagged x5", "clean",
+                                   two_stage(35, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # step 12 (docs/plans/plan_step12_dro.md, user-approved 2026-10-18): Group DRO over window steps for model B
+    "B15_nbfeat_all_goof_xt_dro": ("B15_nbfeat_all_goof_xt with Group DRO row weights for model B (worst-step reweighting: eta 1.0, 3 rounds, step risk 1 - OOF AUC shrunk by its s.e., weight ratio <= 8, ESS >= 0.65), bagged x5", "clean",
+                                   two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159,
+                                             b_dro=1.0, b_dro_rho=8.0, b_dro_ess=0.65, b_dro_rounds=3), BAG5),
+    "B15_nbfeat_all_goof_reg": ("Final 1 member (goof) with model B strongly regularised (15 leaves, min 100 rows/leaf, 30% columns, lambda 5), bagged x5", "clean",
+                                two_stage(14, b_params={**B15_PARAMS, "min_child_samples": 100, "colsample_bytree": 0.3, "reg_lambda": 5.0}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_blocks_seedsBC": ("B15_nbfeat_all_goof_blocks, seeds 5-14 (for the 15-seed bag fam_B15_nbfeat_all_goof_blocks_bag15)", "clean",
+                                           two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_soof_seedsBC": ("B15_nbfeat_all_soof, seeds 5-14 (seed check of its CV and the 15-seed bag fam_B15_nbfeat_all_soof_bag15)", "clean",
+                                    two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="step", nb_feats=159), tuple(range(5, 15))),
+    "B15_nbfeat_all_combo_seedsBC": ("B15_nbfeat_all_combo, seeds 5-14 (for the 15-seed bag fam_B15_nbfeat_all_combo_bag15)", "clean",
+                                     two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159, nb_extra_k=10, nb_feats_into_A=True,
+                                               nb_extra_stats=("max",), nb_feat_delta=True, nb_feat_top1=True, step_ctx=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_seedsBC": ("B15 two-stage, means of all 159 features over labelled neighbours, grouped OOF, seeds 5-14 (for the 15-seed bag fam_B15_nbfeat_all_goof_bag15)", "clean",
+                                    two_stage(14, b_params=B15_PARAMS, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
+    # step 11 (docs/plans/plan_step11.md): post-43 splice donors. Not direct upload candidates
+    # (a low-rate trainer has no high-rate competence, so the CV sanity gate does not apply);
+    # only their post-43 block order is read, through post43_probes.py floorsplice.
+    "lowrate": ("post-43 splice donor: 7-leaf LightGBM (lr 0.05, 300 rounds) trained on the low-fraud-rate steps only (1-6, 10, 12, 23: 176 positives, 0.4-4.5% per step, the regime most like post-43), bagged x10", "clean",
+                lgbm_steps((1, 2, 3, 4, 5, 6, 10, 12, 23), {"num_leaves": 7, "min_child_samples": 20, "colsample_bytree": 0.6, "subsample": 1.0, "subsample_freq": 1, "reg_lambda": 1.0, "reg_alpha": 0.0, "learning_rate": 0.05}), tuple(range(10))),
     "recent7": ("sub_06 recipe trained on the last 7 training steps only (29-35), bagged x5", "clean", lgbm_recent(7), BAG5),
     "recency_hl5": ("sub_06 recipe with exponential recency weights, half-life 5 steps, bagged x5", "clean", lgbm_recency_weighted(5.0), BAG5),
     "all_time": ("sub_06 recipe on all 165 columns + time_step as a feature, bagged x5", "all_time", lgbm(), BAG5),
@@ -736,10 +1083,13 @@ def run_family(d, name):
     if fset == "v2b":
         Xtr, Xte = d.features(); cols = list(Xtr.columns)
     else:
-        cols = {"clean": d.RAW_CLEAN, "all": d.RAW, "all_time": d.RAW + ["time_step"], "local": d.LOCAL}[fset]
+        cols = {"clean": d.RAW_CLEAN, "all": d.RAW, "all_time": d.RAW + ["time_step"], "local": d.LOCAL,
+                "clean_noadv": [c for c in d.RAW_CLEAN if c not in DRIFT_ADV],
+                "clean_stable": [c for c in d.RAW_CLEAN if c not in DRIFT_UNSTABLE]}[fset]
         Xtr, Xte = d.L[cols], d.test[cols]
     y = d.y.to_numpy().astype(int)
     print(f"\n=== {name}: {desc}", flush=True)
+    _DRO_LOG.clear()
     cv = cv_summary(d, fit_predict, Xtr, seeds[:2])
     print(f"  CV 3-fold={cv['auc_3fold']:.4f} hard={cv['auc_hard']:.4f} horizon={cv['auc_horizon']:.4f} "
           f"PR={cv['pr_auc']:.4f}", flush=True)
@@ -754,6 +1104,8 @@ def run_family(d, name):
     v = verdict(rho, cv); print(f"  verdict: {v}")
     path = write_submission(d, pred, name); print(f"  wrote {path}")
     json.dump({**cv, "spearman_vs_board": rho.round(4).to_dict()}, open(ARTIFACTS / f"family_{name}.json", "w"), indent=1)
+    if _DRO_LOG:
+        pd.DataFrame(_DRO_LOG).to_csv(ARTIFACTS / f"dro_{name}.csv", index=False)
     append_ledger(path, desc, len(cols), cv, rho, v)
 
 
