@@ -176,6 +176,8 @@ slots is a day of lost information: there should always be readable candidates b
 | **fam_F1_wavg** | rank average of six 15-seed bags: xt and blocks_xt at weight 5.6, 12 and per-step balance | **0.9707** (2026-10-23: highest public score, 0.97066; +0.0003 vs unbalw; Final 1 candidate) |
 | fam_F1_wavg_win | fam_F1_wavg + its six members on the 21-step window (12 bags; 0.996 like wavg) | 0.9703 (2026-10-23: −0.0003, tie; window averaging closed on the weighted blend; wavg stays Final 1) |
 | fam_B15_nbfeat_all_goof_xgb_unbal_bag15 | XGBoost model B with scale_pos_weight = window ratio, 15 seeds (CV 0.9716 / 0.9229 / 0.8376, the best of any model B) | 0.9625 (2026-10-24: = unweighted XGBoost 0.9619; weighting helps LightGBM + extra_trees only; CV wrong again; third learner closed) |
+| fam_B15_nbfeat_all_goof_xt_focal2 | xt_unbal with focal loss in model B (γ 2, class weight folded in; `FocalLGBM`, `two_stage(b_focal=2.0)`; 5 seeds; 0.980 like xt_unbal) | 0.9669 (2026-10-24: −0.0031 vs xt_unbal = the unweighted xt level: focal loss undoes the weighting gain; rejected) |
+| fam_B15_nbfeat_all_goof_xt_inter | xt_unbal with model-B interaction constraints: each tree uses the raw columns or the neighbour columns, never both (`two_stage(b_inter=True)`; 5 seeds; 0.893 like xt_unbal, period level kept) | 0.9653 (2026-10-24: −0.0046 vs xt_unbal: own × neighbour interactions carry real signal; rejected. Same day, balanced bagging `xt_bbag` failed the CV veto, −0.012 / −0.014 hard / horizon, and was not uploaded) |
 
 Standing (2026-10-05): **6th of 20**; top 0.9681; five entries above us (0.9609–0.9681). **2026-10-18: first place 0.97033.** Model-B depth
 curve (under time-ordered OOF): 31 → 0.9526, 23 → 0.9550, **15 → 0.9562**, 7 → 0.9550, 5 ≈ 7.
@@ -208,6 +210,10 @@ Final 1 and is CV-better on both seed pairs) + Final 2 = `fam_B15_Aoof_random_ba
   right as far as the board can tell: the collapse is a base-rate drop, not blindness, and any change
   that flattens period levels will lose. Amplifying the level (×0.25 in log-odds) read −0.0015 (2026-10-11):
   the model uses the period level about right; the axis is closed in both directions.
+- **A gain CV cannot see is not a public-only gain** (2026-10-24). CV tests transfer from earlier training steps to later
+  ones; public and private are random parts of the same test rows. Simulated, a public difference between two of our files
+  drifts from its private value by SD ≈ 0.001 (0.0003–0.0018 by pair), far below the gains read on the board (0.002–0.005).
+  The board is the better evidence for private; CV's blindness argues for nothing about the private score.
 
 ## Direction (current): continuous improvement
 
@@ -395,6 +401,24 @@ member bags exactly (≤ 4.4e-16).
 **Finals revised again (2026-10-23): Final 1 = `fam_F1_wavg` (0.97066: six 15-seed bags, xt and blocks_xt at weight 5.6,
 12 and per-step balance; `fam_F1_wavg_win` 0.97034 tied), Final 2 unchanged. All three notebooks re-executed 2026-10-23 and
 reproduce it (1.1e-16) and its six bags (≤ 5.6e-16); per-step balance enters as `sample_weight`.**
+
+**Final 2 corrected (2026-10-24, user-approved): the "hedge against public-only gains" rationale is withdrawn; recommended
+Final 2 = `fam_F1_wavg_win` (0.97034).** The old rationale confused two questions: CV (earlier training steps → later ones)
+did not see the `extra_trees` and weighting gains, but the private board is the other 70% of the *same* test rows, so the
+public board, not CV, is the evidence about private. Simulated split (labels drawn from a model's probabilities, random 30/70
+row split; five label sources incl. the weakest, `sub_06`, and half the frauds): a public AUC difference between two of our
+files drifts from its private value by SD 0.0008–0.0018 for Final 1 vs `fam_blend_goof_blocks_bag15`, so Final 1's +0.0053
+public lead is 3–7 SD and that file beats Final 1 on private with ≈ 0.2% probability. It was also not "the only strong file
+without either gain": `fam_blend3_goof_blocks_xgb_bag15` (0.96528) qualifies equally and reads the same. `fam_F1_wavg_win` (public −0.0003, 0.996 like Final 1, drift SD
+0.0003–0.0007) beats it with 14–31% probability: the best Final 2, though worth ≤ 0.0001 AUC in expectation (≈ 0.001 points).
+The old hedge regains value only if Kaggle's public/private split is not random by row (e.g. by time step; the brief does not
+say; the floor probes show public fraud in both the pre- and post-43 blocks, consistent with a random split, not proof).
+**Resolved (2026-10-24): `e1130084.ipynb` reproduces both selections.** It gained an opt-in `CONFIG["extra_windows"]`
+(default `()`; `(21,)` fits every model-B member again on 21 steps and blends all 12) and a strict check (asserts ≤ 1e-9
+against each uploaded bag and blend). Executed end to end: default = Final 1, 7 of 7 files exact (`fam_F1_wavg` 1.1e-16),
+16 min; `(21,)` = Final 2, 13 of 13 exact (`fam_F1_wavg_win` 1.1e-16), about 30 min (log: `artifacts/logs/exec_e1130084_final2.log`).
+Text brought up to date (§2.3/2.4 today's readings, §3.1 rows, §3.2 near-top gate exception, §3.3 Final 2 rationale, summary).
+`final_model*.ipynb` were not changed: they reproduce Final 1, not Final 2. Details: `plan_step11.md`, finals note.
 
 **Finals revised (2026-10-22): Final 1 = `fam_F1_unbalw` (0.97032: rank average of four 15-seed bags, xt and blocks_xt
 each at model-B class weight 5.6 = `is_unbalance` and 12), Final 2 = `fam_blend_goof_blocks_bag15` (0.96539, no extra_trees,
