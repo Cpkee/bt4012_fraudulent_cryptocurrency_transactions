@@ -584,3 +584,218 @@ seed sets favour 21 steps, build `blocks_xt_w21` (15 seeds) and the 21-step Fina
 **Read 2026-10-20: `xt_w21_seedsBC` = 0.96676.** 21 steps: 0.96755 / 0.96676 (mean 0.9672); 14 steps: 0.96678 / 0.96736
 (mean 0.9671). Equal. The window is closed under extra_trees; Final 1 (0.96828) stands. With the third-member and window
 searches closed, no readable route to 0.9700 remains in the two-stage + blend architecture.
+
+## Round 19 (user-approved 2026-10-21): fewer model-B rounds under extra_trees
+
+The one xt knob the board has read is the number of rounds, and only upwards: 600 rounds = 0.96363 (−0.0032 vs xt,
+0.974 like xt, readable). If random thresholds help because model B fits the training period's cut-points less, the
+untested side is *less* fitting. Built (`artifacts/logs/round19_rounds.log`): `xt_r150` and `xt_r200` (one change each:
+`b_estimators`, everything else = xt, seeds 0–4).
+
+**Rules, set before any reading.** Upload only what passes the gate vs xt (< 0.98; r150 first, r200 only if r150 is
+unreadable or reads a gain). Compare with the xt mean of two seed sets (0.9671):
+- ≥ 0.9701 (+0.003) → replicate with seeds 5–14 before anything else; if the replicate holds (two-set mean ≥ +0.002),
+  rebuild `blocks_xt` with the same rounds, bag both to 15 seeds and blend; that blend is the Final 1 candidate.
+- within ±0.003 → tie; 300 rounds stays (no change to Final 1).
+- ≤ 0.9641 → rejected; the rounds axis is closed on both sides of 300.
+Finals policy for the last days: nothing joins Final 1 unless a ≥ 10-seed file reads ≥ +0.003 over what it replaces.
+
+**Round 19 built (2026-10-21):**
+
+| file | CV (xt seeds 0–1 0.9652 / 0.9048 / 0.8124) | vs xt | vs xt15 | vs blocks_xt15 | vs Final 1 | post-43 top-5% (xt 0.111) |
+|---|---|---|---|---|---|---|
+| `xt_r150` | 0.9609 / 0.8928 / 0.8025 (−0.004 / −0.012 / −0.010) | **0.974** | 0.971 | 0.918 | 0.956 | 0.107 |
+| `xt_r200` | 0.9638 / 0.9011 / 0.8093 (−0.001 / −0.004 / −0.003) | 0.990 | 0.988 | 0.935 | 0.974 | 0.115 |
+| `xt_r600` (read 0.96363) | 0.9668 / 0.9093 / 0.8134 | 0.974 | 0.975 | 0.912 | 0.955 | 0.106 |
+
+CV rises monotonically with rounds (150 < 200 < 300 < 600); the board read the opposite at 600, so CV is no guide on
+this axis. `xt_r150` sits exactly as far from xt as r600 does, on the other side: readable, passes the sanity gate
+(0.9609 ≥ 0.95). `xt_r200` fails the gate (0.990): not uploaded. **Next upload = `xt_r150`**, read by the rules above.
+
+**Read 2026-10-21: `xt_r150` = 0.96389** (−0.0032 vs the xt mean 0.9671): rejected by the pre-set rule. It is the exact
+mirror of `xt_r600` (0.96363, −0.0032): two files each 0.974 like xt, on opposite sides, lose the same amount. 300 rounds
+is the peak under extra_trees; the rounds axis is closed on both sides. No replicate, no blocks_xt rebuild. Final 1 stands.
+
+## Round 20 (user-approved 2026-10-22): the untested model-B knobs under extra_trees, gate-only
+
+Everything else in the pipeline has a board reading or an unreadable gate result. Four knobs remain, each one change
+on xt (`artifacts/logs/round20_knobs.log`): `xt_sub08` (row subsampling 0.8), `xt_unbal` (`is_unbalance`), `xt_lr025`
+(lr 0.025 × 600 rounds), `xt_mcs100` (`min_child_samples` 100). Expectation (judgement): none qualifies; at most one,
+with ≈ 1 in 10 for a real gain.
+
+**Rules, set before any build.** A slot only if < 0.98 like xt (and like xt_bag15), CV 3-fold ≥ 0.95, and CV not
+clearly lower than xt (no fold below xt by more than 0.005 on the 3-fold or 0.010 on hard / horizon; CV has favoured
+losers on this model, so it is a veto only, never a reason to upload). Readings vs the xt mean 0.9671: ≥ 0.9701 →
+replicate (seeds 5–14) before anything else; ±0.003 → tie, xt stays; ≤ 0.9641 → rejected. Gate failures close their
+knob without a slot. Final 1 changes only on a ≥ 10-seed file reading ≥ +0.003 over what it replaces.
+
+**Round 20 built (2026-10-22): all four fail the gate; model-B tuning closed.**
+
+| file | CV (xt seeds 0–1 0.9652 / 0.9048 / 0.8124) | vs xt | vs xt_seedsBC | vs xt15 | vs blocks_xt15 | vs Final 1 | post-43 top-5% (xt 0.111) |
+|---|---|---|---|---|---|---|---|
+| `xt_sub08` | 0.9646 / 0.9032 / 0.8039 | 0.992 | 0.993 | 0.994 | 0.942 | 0.980 | 0.111 |
+| `xt_unbal` | 0.9644 / 0.9020 / 0.8050 | 0.983 | **0.985** | 0.986 | 0.937 | 0.974 | 0.112 |
+| `xt_lr025` | 0.9679 / 0.9123 / 0.8183 (best xt-family CV with xtA) | 0.995 | 0.997 | 0.997 | 0.951 | 0.986 | 0.113 |
+| `xt_mcs100` | 0.9631 / 0.8981 / 0.8003 | 0.993 | 0.994 | 0.995 | 0.945 | 0.983 | 0.115 |
+
+Row subsampling, class weighting, a smaller step and larger leaves all land back on xt's ranking (0.983–0.997), as
+column randomisation, bins and model-A changes did. No slot spent. **Model-B tuning under extra_trees is closed on
+leaves, rounds, learning rate, rows, columns, bins, leaf size and class weight.** Final 1 (0.96828) stands.
+
+## Round 21 (2026-10-22, user decision: near the top, 0.99-alike files are uploaded): blends of existing bags
+
+The user overruled the gate for today's slots (changes near the top are minor by nature). Built from existing CSVs
+(`scratchpad/blends_r21.py` logic; weights in the ledger): `fam_F1_xtwin` (xt half = 14- + 21-step bags), `fam_F1_xtcfg`
+(0.9997 like Final 1, not uploaded), `fam_F1_xtwide` (xt half = six equal-strength xt variants). Slot order: xtwin,
+`xt_unbal` (the most distinct new single, 0.974 like Final 1), xtwide.
+**Read 2026-10-22: `fam_F1_xtwin` = 0.96861**, the highest public score, +0.0003 vs Final 1: a tie inside the expected
+±0.0005 for a 0.999-alike file, but principled (both windows board-equal with two seed sets each; more averaging).
+Follow-up building (`artifacts/logs/round21_blocks_w21.log`): `blocks_xt_w21` seeds 0–14 → the symmetric blend
+(xt14 + xt21 + bxt14 + bxt21) / 4 for 2026-10-23.
+**Read 2026-10-22: `xt_unbal` = 0.96996** (+0.0029 vs the xt mean 0.9671, +0.0017 vs Final 1 from a single 5-seed
+model; 0.0001 under the replicate line, so treated as a signal to replicate). CV had it slightly lower
+(−0.001 / −0.003 / −0.007): CV blind again. Up-weighting the positives changes which splits model B chooses near the
+fraud region. **Round 22 queue (`artifacts/logs/round22_unbal.log`):** `xt_unbal_seedsBC` (replicate, seeds 5–14) →
+`blocks_xt_unbal` (seeds 0–4) → `blocks_xt_unbal_seedsBC` → `blocks_xt_w21` (0–14, round 21). Rules: replicate ≥ 0.968
+(two-set mean ≥ 0.969) → unbal is real: blend `xt_unbal_bag15` + `blocks_xt_unbal_bag15` becomes the Final 1 candidate
+(expected ≈ members' mean + 0.0016); replicate ≤ 0.966 → the 0.96996 was largely seed luck, Final 1 stays.
+Next on this axis if it holds: the strength of the weighting (`scale_pos_weight` between 1 and the balanced ratio).
+Queued after round 22 (`artifacts/logs/round22_spw3.log`): `xt_spw3` (`scale_pos_weight` 3; the balanced weight
+`is_unbalance` applies is 5.6 = 84.9% / 15.1% in the window). **Slots of 2026-10-23, in order:** (1) `xt_unbal_seedsBC`
+replicate; (2) the blend `xt_unbal_bag15` + `blocks_xt_unbal_bag15` if the replicate holds (else `blocks_xt_unbal` alone
+as the reading of weighting on the partner); (3) `xt_spw3` or the symmetric window blend, decided by (1).
+
+**Round 22 built (2026-10-22, 30 min: model A cached):**
+
+| file | CV (3-fold / hard / horizon) | nearest / notable rank similarity |
+|---|---|---|
+| `xt_unbal_seedsBC` (replicate) | 0.9650 / 0.9040 / 0.8076 (seeds 0–4: 0.9644 / 0.9020 / 0.8050) | 0.995 like xt_unbal (5 seeds): a pure noise reading, like xt_seedsBC was |
+| `blocks_xt_unbal` / `_seedsBC` | 0.9625 / 0.8980 / 0.7996 · 0.9630 / 0.8993 / 0.8006 (blocks_xt 0.9628 / 0.8985 / 0.8029) | bag15 0.992 like blocks_xt_bag15: weighting moves the blocks member less than xt (0.987) |
+| `blocks_xt_w21` / `_seedsBC` | 0.9643 / 0.9029 / 0.8098 · 0.9650 / 0.9049 / 0.8141 | 0.985 like blocks_xt |
+| **`fam_F1_unbal`** = rank average of `xt_unbal_bag15` + `blocks_xt_unbal_bag15` | – | 0.9905 like Final 1; members 0.941 apart (Final 1's 0.949) |
+| `fam_F1_win4` = (xt14 + xt21 + bxt14 + bxt21) / 4 | – | 0.9991 like `fam_F1_xtwin`, 0.9966 like Final 1 |
+
+Slots of 2026-10-23: (1) `xt_unbal_seedsBC`; (2) `fam_F1_unbal` (the file that can beat 0.97033: members' mean
+≈ 0.970 / 0.966 + the blend effect ≈ 0.0016); (3) `xt_spw12` if (1) holds, else `fam_F1_win4` (revised below).
+
+**Weight-strength curve built (2026-10-22, model B `scale_pos_weight`, extra_trees, 5 seeds):**
+
+| weight | file | CV (3-fold / hard / horizon) | vs xt | vs xt_unbal | public |
+|---|---|---|---|---|---|
+| 1 | `xt` | 0.9652 / 0.9048 / 0.8124 | – | 0.983 | 0.9671 (two seed sets) |
+| 3 | `xt_spw3` | 0.9642 / 0.9015 / 0.8057 | 0.988 | 0.992 | – |
+| 5.6 (balanced) | `xt_unbal` | 0.9644 / 0.9020 / 0.8050 | 0.983 | – | **0.96996** |
+| 12 | `xt_spw12` | 0.9672 / 0.9106 / 0.8173 (best of the four) | 0.966 | 0.989 | – |
+
+`xt_spw3` sits between its neighbours (uninformative, not uploaded). `xt_spw12` moves furthest from xt (0.966) and has the
+best CV of the curve. **Slot 3 of 2026-10-23 = `xt_spw12`** if the replicate holds (reads whether the gain keeps growing
+with the weight: ≥ 0.9700 → the axis continues, build the spw12 blend partner; ≤ 0.968 → balanced 5.6 is the peak);
+else `fam_F1_win4`.
+
+## Round 23 (2026-10-22, Kaggle day from 08:00 SGT): `fam_F1_unbal` = 0.97020
+
+The user uploaded the blend first. **0.97020**: highest public score, +0.0019 vs Final 1 (0.96828), +0.0002 vs the
+5-seed `xt_unbal`, 0.00013 below first place 0.97033 (a tie at board resolution). Both members are 15-seed bags, so
+seed noise is far below the 5-seed 0.0015: class weighting is confirmed at bag level; the 5-seed replicate is no longer
+needed for the decision (kept as a spare). Remaining slots today: (2) `xt_spw12` (does the gain grow past balanced?);
+(3) if spw12 ≥ ~0.970 → `fam_F1_spw12` (blend of the weight-12 bags, building: `artifacts/logs/round23_spw12.log`),
+else `xt_unbal_seedsBC` or nothing. Finals: `fam_F1_unbal` is the Final 1 candidate (+0.0019, under the +0.003 rule
+but at 15 seeds and consistent with xt_unbal's +0.0029); the notebook switch follows the day's readings.
+**Read 2026-10-22: `xt_spw12` = 0.96917** (−0.0008 vs `xt_unbal`, +0.0021 vs xt). Weight curve on the board (5 seeds):
+1 → 0.9671, 5.6 → 0.96996, 12 → 0.96917. The gain is real on both sides of balanced and does not grow past it.
+`fam_F1_spw12` is not uploaded as a replacement. Slot 3 instead = **`fam_F1_unbalw`**: each member averaged over the two
+good weights (xt half = xt_unbal_bag15 + xt_spw12_bag15, blocks half = blocks_xt_unbal_bag15 + blocks_xt_spw12_bag15):
+averaging over the weight instead of picking it on the public board, the same logic as `fam_F1_xtwin` for the window.
+**Built 2026-10-22:** `xt_spw12_seedsBC` CV 0.9666 / 0.9088 / 0.8189 (seed-consistent with 0–4), `blocks_xt_spw12` /
+`_seedsBC` 0.9628 / 0.8984 / 0.8026 · 0.9636 / 0.9012 / 0.8040, their 15-seed bags, and **`fam_F1_unbalw`** (4 × 1/4
+pooled ranks: xt and blocks_xt at weights 5.6 and 12): **0.9991 like `fam_F1_unbal`**. Rule set before the reading: it
+becomes Final 1 only if it reads ≥ 0.97020 (it needs four member bags in the notebooks); otherwise `fam_F1_unbal`.
+Note for the report: 5.6 is the window's licit/fraud ratio (what `is_unbalance` applies); 12 is an exploration point
+(≈ 2 × balanced, chosen by judgement to read the direction of the curve, not derived from the data).
+**Read 2026-10-22: `fam_F1_unbalw` = 0.97032** (+0.00012 vs `fam_F1_unbal`; first place 0.97033). Meets the pre-set
+rule: **Final 1 candidate**. The notebooks move to four members (xt and blocks_xt at weights 5.6 = `is_unbalance` and 12).
+**Notebooks (2026-10-22):** `e1130084.ipynb` gets `CONFIG["class_weights"]` (`{"balanced": is_unbalance, "weight 12":
+scale_pos_weight 12}`; each model-B variant fitted once per weight → four members, rank-averaged) and its text (§0, §2.2,
+§2.3 class-weight row, §2.4 rewritten: weighting is now in the final model, with the board evidence and the validation
+caveat, §2.5, §3.1 rows, §3.3, summary). `final_model*.ipynb`: member suffixes `_unbal` / `_spw12`, default members =
+the four. Re-executed (`artifacts/logs/exec_notebooks_unbalw.log`); each must reproduce `fam_F1_unbalw` and its four
+member bags. Final 2 stays `fam_blend_goof_blocks_bag15` (0.96539; 0.952 like the new Final 1: hedges both public-only
+gains) unless the user decides otherwise.
+
+## Round 24 (user-approved 2026-10-22): new first place 0.97300 (gap +0.0027 from 0.97032)
+
+The gap is one more weighting-sized gain. Measured: the window's per-step fraud rate runs 4.5% (step 23) to 29.9% (step
+28), so one global weight (5.6) treats rare-fraud steps like common-fraud ones. Built (`artifacts/logs/round24_weights.log`):
+- `xt_stepunbal` (`two_stage(b_step_unbal=True)`): each illicit row weighted by its own step's licit/illicit ratio
+  (2.3–21), replacing `is_unbalance`. Fraud in the low-rate steps (23, 33, 34, 22), the most like the test's late
+  block, counts most. Judgement ≈ 1 in 4 for a real gain. (Unrelated to `stepbal` 2026-10-08, which equalised step
+  totals without class balance and was unreadable.)
+- `xtA_unbal`: `is_unbalance` in model A too (neighbour scores change). ≈ 1 in 8; model-A changes have converged onto
+  xt before.
+Reading vs `xt_unbal` (0.96996, 5 seeds): ≥ +0.003 → blocks partner + 15-seed bags + blend (the 0.97300 attempt);
+±0.003 → tie; ≤ −0.003 → rejected. The paused `final_model_kaggle.ipynb` run resumes after these builds.
+
+**Round 24 built (2026-10-22):**
+
+| file | CV (xt_unbal 0.9644 / 0.9020 / 0.8050) | vs xt | vs xt_unbal | vs xt_unbal15 | vs F1_unbalw | post-43 top 5% |
+|---|---|---|---|---|---|---|
+| `xt_stepunbal` | 0.9649 / 0.9044 / 0.8089 | 0.986 | **0.988** | 0.988 | 0.973 | 0.112 |
+| `xtA_unbal` | 0.9661 / 0.9071 / 0.8119 | 0.979 | 0.993 | 0.995 | 0.981 | 0.115 |
+
+`xtA_unbal` lands on xt_unbal's ranking (0.993-0.995), as every model-A change before it: unreadable, held.
+`xt_stepunbal` is the more distinct (0.988 like xt_unbal; xt_unbal itself was 0.983-0.985 like xt and read +0.003),
+CV level-to-higher. **Slot 1 of 2026-10-23 = `xt_stepunbal`.** Its blocks partner and seeds 5-14 are building after the
+notebook run (`artifacts/logs/round24_stepunbal_bags.log`), so a stepunbal blend is ready for slot 2 if slot 1 reads ≥ 0.9700.
+**Built 2026-10-22:** `xt_stepunbal_seedsBC` CV 0.9651 / 0.9053 / 0.8144 (seed-consistent), `blocks_xt_stepunbal` /
+`_seedsBC` 0.9621 / 0.8969 / 0.7989 · 0.9624 / 0.8981 / 0.8008, their 15-seed bags, and **`fam_F1_stepunbal`** (rank
+average of the two bags): 0.995 like `fam_F1_unbal`, 0.993 like Final 1. It is uploaded only if `xt_stepunbal` reads
+≥ 0.9700 (slot 2 of 2026-10-23); a reading near F1_unbal would otherwise be noise.
+
+## Slots of 2026-10-23 (set before the first reading)
+
+Built: `fam_F1_wavg` (six 15-seed bags: xt and blocks_xt at weight 5.6, 12 and per-step balance; 0.9992 like Final 1).
+(1) `xt_stepunbal`. Then by its score vs `xt_unbal` 0.96996:
+- ≥ 0.9700 → (2) `fam_F1_stepunbal`, (3) `fam_F1_wavg`;
+- 0.9670–0.9700 (tie) → (2) `fam_F1_wavg` (averaging over three tied schemes; Final 1 candidate only if ≥ 0.97032), (3) kept;
+- < 0.9670 → per-step balance rejected; (2) `xt_unbal_seedsBC` (the replicate, report record) or kept.
+**Read 2026-10-23: `xt_stepunbal` = 0.96954** (−0.0004 vs `xt_unbal`): tie. Three weighting schemes (5.6 / 12 / per-step)
+read 0.96996 / 0.96917 / 0.96954: the gain from up-weighting fraud (+0.0025 vs unweighted on average) is robust, the scheme
+does not matter. Per-step balance closed; `fam_F1_stepunbal` not uploaded. Slot 2 = `fam_F1_wavg` per the pre-set rule.
+**Read 2026-10-23: `fam_F1_wavg` = 0.97066** (+0.00034 vs `fam_F1_unbalw`): highest public score; meets the pre-set rule,
+Final 1 candidate (notebooks follow once the day's last reading is in).
+
+## Round 25 (2026-10-23, user target ≥ 0.97100 for slot 3)
+
+No untried mechanism is expected to add +0.0003 on its own. What has added +0.0001 to +0.0003 each time is averaging over
+an axis the board cannot separate (window 14/21 +0.0003, weight 5.6/12 +0.0001, three schemes +0.0003); the window has
+only been averaged on the unweighted model. Built (`artifacts/logs/round25_w21.log`): the six weighted members (xt and
+blocks_xt × 5.6 / 12 / per-step) on the 21-step window, 15 seeds each → `fam_F1_wavg_win` = 12 bags, equal pooled-rank
+weights. Expectation (judgement): ≈ 0.9707–0.9710, about even odds of ≥ 0.97100; a reading inside ±0.0005 of 0.97066 is
+noise. It becomes Final 1 only if ≥ 0.97066 (the notebooks then need a per-member window).
+**Built 2026-10-23 (11:03–12:17; a first launch failed on zsh word-splitting, nothing ran):** the six weighted members on
+the 21-step window, 15 seeds each. CV (seeds 0–4 · 5–14), xt members 0.969–0.971 3-fold / 0.824–0.839 horizon, blocks
+members 0.963–0.965 / 0.806–0.815 (as at 14 steps, the hard and horizon folds see the extra history). Each 21-step bag
+ranks 0.978–0.987 like its 14-step twin; the 21-step half ranks 0.985 like `fam_F1_wavg`. **`fam_F1_wavg_win`** (12 bags)
+ranks **0.9961** like `fam_F1_wavg`: the most distinct of the averaging steps (unbalw 0.9991, wavg 0.9992), so its reading
+can move by up to ≈ ±0.001. Slot 3 of 2026-10-23.
+**Read 2026-10-23: `fam_F1_wavg_win` = 0.97034** (−0.00032 vs `fam_F1_wavg`): tie. Averaging the window adds nothing on
+the weighted blend. **Final 1 = `fam_F1_wavg` (0.97066).** The notebooks move to six members: per-step class balance
+enters as row weights (`sample_weight`), the other two schemes as LightGBM parameters.
+
+## Round 26 (2026-10-24): class weighting on a third learner
+
+Built (`artifacts/logs/round26_xgb_unbal.log`): `xgb_unbal` = the XGBoost model B (depth 4; unweighted 0.96189, ranked
+0.944 like the LightGBM family, 0.005 below it) with `scale_pos_weight` = the window's licit/illicit ratio, seeds 0–14.
+Judgement ≈ 1 in 10 for a real blend gain. **Rules, set before the reading:** slot 1 = `xgb_unbal` (5 seeds). If it
+reads ≥ 0.9690 (within ≈ 0.001 of the weighted LightGBM members) → slot 2 = `fam_F1_wavg_xgb`: `fam_F1_wavg`'s six bags
+and `xgb_unbal_bag15`, the three learners (xt, blocks_xt, xgb) at equal thirds; it replaces Final 1 only if it reads
+≥ +0.003 over 0.97066 (the notebooks would need the xgb member). If < 0.9690 → no further upload; finals stand.
+**Built 2026-10-24 (12:25–12:37):** `xgb_unbal` CV **0.9716 / 0.9229 / 0.8376** (seeds 5–14: 0.9701 / 0.9186 / 0.8306),
+far above unweighted XGBoost (0.9648 / 0.9026 / 0.8062) and above every weighted LightGBM member; ranks 0.965 like
+unweighted XGBoost, 0.938 like xt_unbal, 0.939 like Final 1: readable. `xgb_unbal_bag15` and `fam_F1_wavg_xgb`
+(thirds; 0.993 like Final 1) are built for slot 2. CV has been wrong about learners before (unweighted XGBoost: CV
+−0.003 to −0.014, board −0.001), so the board decides by the rules above.
+**Read 2026-10-24: `xgb_unbal_bag15` = 0.96254** (the 15-seed bag was uploaded): +0.0007 vs unweighted XGBoost (0.96189),
+−0.0074 vs `xt_unbal`. Below the 0.9690 bar: `fam_F1_wavg_xgb` not uploaded, finals stand. The weighting gain is specific
+to LightGBM with random thresholds (+0.0025 there, ≈ 0 on XGBoost), and CV, which put this model above every member
+(+0.007 / +0.020 / +0.031 over xt_unbal), was wrong by the largest margin of the project. Third-learner axis closed.
