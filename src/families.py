@@ -103,6 +103,18 @@ BOARD = {
     "fam_B15_nbfeat_all_goof_dropadv.csv": 0.95957,
     "fam_B15_nbfeat_all_goof_xt.csv": 0.96678,
     "fam_B15_nbfeat_all_goof_xt_r600.csv": 0.96363,
+    "fam_B15_nbfeat_all_goof_xt_r150.csv": 0.96389,
+    "fam_F1_xtwin.csv": 0.96861,
+    "fam_B15_nbfeat_all_goof_xt_unbal.csv": 0.96996,
+    "fam_F1_unbal.csv": 0.97020,
+    "fam_B15_nbfeat_all_goof_xt_spw12.csv": 0.96917,
+    "fam_F1_unbalw.csv": 0.97032,
+    "fam_B15_nbfeat_all_goof_xt_stepunbal.csv": 0.96954,
+    "fam_F1_wavg.csv": 0.97066,
+    "fam_F1_wavg_win.csv": 0.97034,
+    "fam_B15_nbfeat_all_goof_xgb_unbal_bag15.csv": 0.96254,
+    "fam_B15_nbfeat_all_goof_xt_focal2.csv": 0.96688,
+    "fam_B15_nbfeat_all_goof_xt_inter.csv": 0.96532,
     "fam_B15_nbfeat_all_goof_xt_seedsBC.csv": 0.96736,
     "fam_B15_nbfeat_all_goof_blocks_xt.csv": 0.96630,
     "fam_blend_B15_nbfeat_all_goof_xt_bag15_B15_nbfeat_all_goof_blocks_xt_bag15.csv": 0.96828,
@@ -200,6 +212,48 @@ def communities(edges: pd.DataFrame, step_of: pd.Series) -> pd.Series:
     _COMM = pd.Series(out, name="comm"); _COMM.to_csv(cache); return _COMM
 
 
+class FocalLGBM:
+    """LightGBM with a focal-loss objective, behaving like LGBMClassifier (fit / predict_proba).
+
+    Round 27 (2026-10-24, plan_step11.md): loss -a * (1 - pt)^gamma * log(pt), pt = the probability of the true
+    class, a = pos_weight for illicit rows and 1 for licit rows (times any sample weight). gamma = 0 is the weighted
+    logistic loss LightGBM's is_unbalance applies, started from the same score (log-odds of the unweighted fraud
+    rate, as boost_from_average). Wiring check (2026-10-24): FocalLGBM(0, ratio) reproduces is_unbalance=True to
+    1e-16 under every model-B setting except colsample_bytree, where LightGBM draws a different column subset per
+    tree for a custom objective; the gap is then a seed change (Spearman 0.994 vs 0.994 between two seeds).
+    gamma > 0 shrinks the gradient of rows already scored right, so later trees concentrate on the rows still
+    scored wrong. The exact Hessian goes negative on badly misclassified rows; it is floored at the focal-weighted
+    logistic Hessian a * pt * (1 - pt)^(gamma + 1), which equals it at gamma = 0."""
+
+    def __init__(self, gamma: float, pos_weight: float, **params):
+        self.gamma, self.pos_weight = float(gamma), float(pos_weight)
+        self.params = {k: v for k, v in params.items() if k not in ("is_unbalance", "scale_pos_weight", "objective")}
+
+    def _objective(self, a: np.ndarray):
+        g_ = self.gamma
+
+        def obj(y_true, raw):
+            p = 1.0 / (1.0 + np.exp(-raw)); pos = y_true == 1
+            q = np.clip(np.where(pos, p, 1.0 - p), 1e-15, 1.0); s = np.where(pos, 1.0, -1.0); lq = np.log(q)
+            grad = a * s * (1.0 - q) ** g_ * (g_ * q * lq - (1.0 - q))
+            hess = a * q * (1.0 - q) ** g_ * ((1.0 - q) * (g_ * lq + 2.0 * g_ + 1.0) - g_ ** 2 * q * lq)
+            return grad, np.maximum(hess, a * q * (1.0 - q) ** (g_ + 1.0))
+        return obj
+
+    def fit(self, X, y, sample_weight=None):
+        y = np.asarray(y, float)
+        a = np.where(y == 1, self.pos_weight, 1.0) * (1.0 if sample_weight is None else np.asarray(sample_weight, float))
+        pavg = np.clip(np.average(y, weights=sample_weight), 1e-15, 1 - 1e-15)
+        self.init_ = float(np.log(pavg / (1.0 - pavg)))
+        self.model_ = lgb.LGBMClassifier(**self.params, objective=self._objective(a))
+        self.model_.fit(X, y, init_score=np.full(len(y), self.init_))
+        return self
+
+    def predict_proba(self, X):
+        p = 1.0 / (1.0 + np.exp(-(self.model_.predict(X, raw_score=True) + self.init_)))
+        return np.column_stack([1.0 - p, p])
+
+
 def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 300, hop2: bool = False, unlab: bool = False,
               b_params: dict | None = None, b_estimators: int | None = None, a_all_history: bool = False, half_life: float | None = None,
               b_interact: int = 0, b_rank: bool = False, smooth: float | None = None,
@@ -207,12 +261,13 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
               a_oof: str = "time", nb_labels: bool = False, a_bag: int = 1, nb_label_mix: float = 0.0,
               oof_folds: int = 5, a_test_from_folds: bool = False,
               a_extra_hist: int = 0, b_pseudo_unlab: bool = False, b_stack_logreg: bool = False, b_stack_model: str = "logreg",
-              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_gnn_embed: bool = False,
+              nb_steprank: bool = False, step_ctx: bool = False, nb_feats: int = 0, nb_feat_stats: tuple = ("mean",), nb_feat_delta: bool = False, nb_feats_into_A: bool = False, nb_feat_hop2: bool = False, b_step_balance: bool = False, b_step_unbal: bool = False, b_gnn_embed: bool = False,
               nb_comm: bool = False, b_pseudo_pre43: int = 0, b_pseudo_post43_neg: bool = False,
               nb_feat_scorew: bool = False, nb_feat_top1: bool = False, nb_extra_k: int = 0, nb_extra_stats: tuple = (), b_blocks: bool = False,
               a_cols: str = "all", b_rsub: int = 0, b_rsub_frac: float = 0.5,
               b_dro: float | None = None, b_dro_rho: float = 8.0, b_dro_ess: float = 0.65, b_dro_rounds: int = 3,
-              b_dro_risk: str = "group", b_nbonly: bool = False, b_blocks_inout: bool = False):
+              b_dro_risk: str = "group", b_nbonly: bool = False, b_blocks_inout: bool = False, b_focal: float | None = None,
+              b_inter: bool = False):
     """Two-stage collective model on the recent-window base.
 
     Model A (sub_06 recipe) scores every row; each row then gets the mean and max of model-A
@@ -328,14 +383,28 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             return m.fit(A_df, y_win, sample_weight=w)
         if b_learner == "xgb":
             import xgboost as xgb
+            # round 26 (2026-10-24): is_unbalance in b_params -> XGBoost scale_pos_weight = the window's licit/illicit
+            # ratio (what LightGBM's is_unbalance applies); absent -> 1.0, XGBoost's default (earlier xgb files unchanged)
+            spw = float((y_win == 0).sum() / (y_win == 1).sum()) if baseB.get("is_unbalance") else 1.0
             m = xgb.XGBClassifier(n_estimators=baseB["n_estimators"], learning_rate=baseB["learning_rate"], max_depth=4,
                                   subsample=1.0, colsample_bytree=0.6, min_child_weight=10, reg_lambda=1.0, tree_method="hist",
-                                  n_jobs=-1, random_state=seed)
+                                  n_jobs=-1, random_state=seed, scale_pos_weight=spw)
             return m.fit(A_df, y_win, sample_weight=w)
+        if b_focal is not None:
+            # round 27 (2026-10-24): focal loss in model B (FocalLGBM), class weight as in baseB: is_unbalance -> the
+            # window's licit/illicit ratio, scale_pos_weight -> that value, neither -> 1
+            yv = np.asarray(y_win)
+            pw = float((yv == 0).sum() / (yv == 1).sum()) if baseB.get("is_unbalance") else float(baseB.get("scale_pos_weight", 1.0))
+            return FocalLGBM(b_focal, pw, **{**baseB, "random_state": seed}).fit(A_df, y_win, sample_weight=w)
         if not b_rank:
             params = dict(baseB)
             if b_monotone:
                 params["monotone_constraints"] = [1 if c in ("nb_in_mean", "nb_in_max", "nb_out_mean", "nb_out_max") else 0 for c in A_df.columns]
+            if b_inter:
+                # round 29 (2026-10-24): every tree uses either the row's own raw columns or the neighbour columns (the six
+                # scores and the neighbour feature means), never both, so model B = f(own row) + g(neighbourhood)
+                raw = [i for i, c in enumerate(A_df.columns) if c.startswith("feat_")]
+                params["interaction_constraints"] = [raw, [i for i in range(A_df.shape[1]) if i not in set(raw)]]
             return lgb.LGBMClassifier(**{**params, "random_state": seed}).fit(A_df, y_win, sample_weight=w)
         # one group over the whole window: the objective is then pairwise ordering across all
         # rows, which is what pooled AUC measures (per-step groups made cross-step scales
@@ -550,6 +619,14 @@ def two_stage(last_k: int = 14, params: dict | None = None, n_estimators: int = 
             # the large steps (22: 1,763 rows) stop dominating the small ones (27: 206 rows)
             cnt = pd.Series(tB).map(pd.Series(tB).value_counts()).to_numpy()
             wB = len(tB) / (np.unique(tB).size * cnt)
+        if b_step_unbal:
+            # round 24 (2026-10-22): per-step class balance. Each illicit row is weighted by its own step's
+            # licit/illicit ratio (2.3-21 in the window, vs 5.6 for one global is_unbalance), so fraud in low-rate
+            # steps (23, 33, 34, 22), the most like the test's late block, counts most; licit rows keep weight 1
+            yv = np.asarray(yB, float)
+            rate = pd.Series(yv).groupby(np.asarray(tB)).transform("mean").to_numpy()
+            wcls = np.where(yv == 1, (1 - rate) / rate, 1.0)
+            wB = wcls if wB is None else np.asarray(wB, float) * wcls
         if b_dro is not None:
             # step 12 (docs/plans/plan_step12_dro.md): Group DRO over the window steps. Each round scores the
             # window rows out-of-fold with model B (folds grouped by connected component, as a_oof="group"),
@@ -995,6 +1072,127 @@ FAMILIES = {
                                            two_stage(21, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
     "B15_nbfeat_all_goof_xt_all": ("xt trained on all 35 training steps, bagged x5", "clean",
                                    two_stage(35, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # round 19 (2026-10-21, user-approved): the untested side of the one xt knob the board read (600 rounds −0.0032,
+    # 0.974 like xt). If random thresholds help by fitting the training period's cut-points less, fewer rounds is next
+    "B15_nbfeat_all_goof_xt_r150": ("B15_nbfeat_all_goof_xt with 150 model-B rounds (less fitting: the other side of r600's −0.0032), bagged x5", "clean",
+                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=150, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_r200": ("B15_nbfeat_all_goof_xt with 200 model-B rounds (midpoint between r150 and xt's 300), bagged x5", "clean",
+                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=200, a_oof="group", nb_feats=159), BAG5),
+    # round 20 (2026-10-22, user-approved): the untested model-B knobs under extra_trees, gate-only (a slot only if
+    # < 0.98 like xt and CV not clearly lower)
+    "B15_nbfeat_all_goof_xt_sub08": ("xt with model-B row subsampling 0.8 per tree (more randomisation, as extra_trees), bagged x5", "clean",
+                                     two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "subsample": 0.8}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_unbal": ("xt with model-B is_unbalance=True (positive class up-weighted to balance: changes split choice), bagged x5", "clean",
+                                     two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_lr025": ("xt with model-B lr 0.025 x 600 rounds (same total step as 0.05 x 300, smoother), bagged x5", "clean",
+                                     two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "learning_rate": 0.025}, b_estimators=600, a_oof="group", nb_feats=159), BAG5),
+    # round 21 (2026-10-22): fam_F1_xtwin (xt half = 14- + 21-step bags) read 0.96861; the blocks half gets the same
+    # window average, so the blend is symmetric: (xt14 + xt21 + bxt14 + bxt21) / 4
+    "B15_nbfeat_all_goof_blocks_xt_w21": ("blocks_xt with a 21-step training window (steps 15-35), bagged x5", "clean",
+                                          two_stage(21, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_w21_seedsBC": ("blocks_xt with a 21-step window, seeds 5-14 (for the 15-seed bag)", "clean",
+                                                  two_stage(21, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), tuple(range(5, 15))),
+    # round 22 (2026-10-22): xt_unbal read 0.96996 (+0.0029 vs the xt mean, 0.0001 under the replicate line):
+    # replicate on seeds 5-14, then the blend partner rebuilt with is_unbalance
+    "B15_nbfeat_all_goof_xt_unbal_seedsBC": ("xt_unbal, seeds 5-14 (replicate of the 0.96996 reading, no shared seed; with it the 15-seed bag)", "clean",
+                                             two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt_unbal": ("blocks_xt with model-B is_unbalance=True (the blend partner on the unbal recipe), bagged x5", "clean",
+                                            two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_unbal_seedsBC": ("blocks_xt_unbal, seeds 5-14 (for the 15-seed bag)", "clean",
+                                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_xt_spw3": ("xt with model-B scale_pos_weight 3 (about half of is_unbalance's balanced weight, 5.6 in the window: 15.1% positives), bagged x5", "clean",
+                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "scale_pos_weight": 3.0}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_spw12": ("xt with model-B scale_pos_weight 12 (about twice is_unbalance's balanced 5.6: past the point that read 0.96996), bagged x5", "clean",
+                                     two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "scale_pos_weight": 12.0}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # round 23 (2026-10-22): fam_F1_unbal read 0.97020; the weight-12 blend is built ahead of xt_spw12's reading
+    "B15_nbfeat_all_goof_xt_spw12_seedsBC": ("xt_spw12, seeds 5-14 (for the 15-seed bag)", "clean",
+                                             two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "scale_pos_weight": 12.0}, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt_spw12": ("blocks_xt with model-B scale_pos_weight 12, bagged x5", "clean",
+                                            two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "scale_pos_weight": 12.0}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_spw12_seedsBC": ("blocks_xt_spw12, seeds 5-14 (for the 15-seed bag)", "clean",
+                                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "scale_pos_weight": 12.0}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), tuple(range(5, 15))),
+    # round 24 (2026-10-22, user-approved): the class-weighting mechanism aimed at the low-rate steps / at model A
+    "B15_nbfeat_all_goof_xt_stepunbal": ("xt with per-step class balance in model B (each illicit row weighted by its step's licit/illicit ratio, 2.3-21; replaces the global is_unbalance 5.6), bagged x5", "clean",
+                                         two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_step_unbal=True), BAG5),
+    "B15_nbfeat_all_goof_xt_stepunbal_seedsBC": ("xt_stepunbal, seeds 5-14 (for the 15-seed bag)", "clean",
+                                                 two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_step_unbal=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt_stepunbal": ("blocks_xt with per-step class balance in model B, bagged x5", "clean",
+                                                two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_step_unbal=True, b_blocks=True), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_stepunbal_seedsBC": ("blocks_xt_stepunbal, seeds 5-14 (for the 15-seed bag)", "clean",
+                                                        two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_step_unbal=True, b_blocks=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_xtA_unbal": ("xt_unbal with is_unbalance in model A as well (the neighbour scores change), bagged x5", "clean",
+                                      two_stage(14, params={"is_unbalance": True}, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    # round 25 (2026-10-23): the six weighted members of fam_F1_wavg (0.97066) rebuilt on the 21-step window (14 and 21
+    # read equal under extra_trees; window averaging added +0.0003 as fam_F1_xtwin) for a 12-member window x scheme blend
+    "B15_nbfeat_all_goof_xt_unbal_w21": ("xt_unbal with a 21-step window (steps 15-35), seeds 0-4", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_unbal_w21_seedsBC": ("xt_unbal with a 21-step window (steps 15-35), seeds 5-14", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt_unbal_w21": ("blocks_xt_unbal with a 21-step window (steps 15-35), seeds 0-4", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_unbal_w21_seedsBC": ("blocks_xt_unbal with a 21-step window (steps 15-35), seeds 5-14", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_xt_spw12_w21": ("xt_spw12 with a 21-step window (steps 15-35), seeds 0-4", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True, "scale_pos_weight": 12.0}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_spw12_w21_seedsBC": ("xt_spw12 with a 21-step window (steps 15-35), seeds 5-14", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True, "scale_pos_weight": 12.0}, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt_spw12_w21": ("blocks_xt_spw12 with a 21-step window (steps 15-35), seeds 0-4", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True, "scale_pos_weight": 12.0}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_spw12_w21_seedsBC": ("blocks_xt_spw12 with a 21-step window (steps 15-35), seeds 5-14", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True, "scale_pos_weight": 12.0}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_xt_stepunbal_w21": ("xt_stepunbal with a 21-step window (steps 15-35), seeds 0-4", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_step_unbal=True), BAG5),
+    "B15_nbfeat_all_goof_xt_stepunbal_w21_seedsBC": ("xt_stepunbal with a 21-step window (steps 15-35), seeds 5-14", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_step_unbal=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt_stepunbal_w21": ("blocks_xt_stepunbal with a 21-step window (steps 15-35), seeds 0-4", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_step_unbal=True, b_blocks=True), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_stepunbal_w21_seedsBC": ("blocks_xt_stepunbal with a 21-step window (steps 15-35), seeds 5-14", "clean",
+        two_stage(21, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159, b_step_unbal=True, b_blocks=True), tuple(range(5, 15))),
+    # round 26 (2026-10-24): class weighting on the XGBoost model B (unweighted: 0.96189, ranks 0.944 like the LightGBM
+    # family): a third learner as a blend member if weighting lifts it to the members' level
+    "B15_nbfeat_all_goof_xgb_unbal": ("XGBoost model B (depth 4) with scale_pos_weight = the window's licit/illicit ratio (5.6), grouped OOF, bagged x5", "clean",
+                                      two_stage(14, b_params={**B15_PARAMS, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_learner="xgb"), BAG5),
+    "B15_nbfeat_all_goof_xgb_unbal_seedsBC": ("xgb_unbal, seeds 5-14 (for the 15-seed bag)", "clean",
+                                              two_stage(14, b_params={**B15_PARAMS, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_learner="xgb"), tuple(range(5, 15))),
+    # round 27 (2026-10-24, plan_step11.md): focal loss in model B on the xt_unbal recipe (class weight = the window's
+    # licit/illicit ratio, folded into the objective). gamma 0 = xt_unbal up to the column draw (a seed change: should rank
+    # like a seed replicate of xt_unbal, ~0.995); gamma 2 / 1 = the reading
+    "B15_nbfeat_all_goof_xt_focal0": ("xt_unbal with model B on FocalLGBM gamma 0 (wiring check: xt_unbal up to LightGBM's column draw, i.e. a seed change), bagged x5", "clean",
+                                      two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_focal=0.0), BAG5),
+    "B15_nbfeat_all_goof_xt_focal2": ("xt_unbal with focal loss in model B, gamma 2 (rows already scored right count less: later trees work on the rows still scored wrong), bagged x5", "clean",
+                                      two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_focal=2.0), BAG5),
+    "B15_nbfeat_all_goof_xt_focal1": ("xt_unbal with focal loss in model B, gamma 1, bagged x5", "clean",
+                                      two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_focal=1.0), BAG5),
+    "B15_nbfeat_all_goof_xt_focal2_seedsBC": ("xt_focal2, seeds 5-14 (for the 15-seed bag)", "clean",
+                                              two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_focal=2.0), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt_focal2": ("blocks_xt_unbal with focal loss gamma 2 in every block fit (the blend partner), bagged x5", "clean",
+                                             two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True, b_focal=2.0), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_focal2_seedsBC": ("blocks_xt_focal2, seeds 5-14 (for the 15-seed bag)", "clean",
+                                                     two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True, b_focal=2.0), tuple(range(5, 15))),
+    # round 28 (2026-10-24, plan_step11.md): balanced bagging in model B. The class balance of xt_unbal reached by
+    # sampling instead of weights: every tree sees all fraud rows and a fresh random 17.85% of licit rows (the window's
+    # fraud/licit ratio, 1,773 / 9,932, so each tree's sample is balanced as is_unbalance's weights are). LightGBM's
+    # pos/neg_bagging_fraction (bagging_freq = subsample_freq 1; bagging_fraction is then unused); is_unbalance off
+    "B15_nbfeat_all_goof_xt_bbag": ("xt with balanced bagging in model B instead of is_unbalance (each tree: all fraud rows + a random 17.85% of licit rows), bagged x5", "clean",
+                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "pos_bagging_fraction": 1.0, "neg_bagging_fraction": 0.1785}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
+    "B15_nbfeat_all_goof_xt_bbag_seedsBC": ("xt_bbag, seeds 5-14 (for the 15-seed bag)", "clean",
+                                            two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "pos_bagging_fraction": 1.0, "neg_bagging_fraction": 0.1785}, b_estimators=300, a_oof="group", nb_feats=159), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt_bbag": ("blocks_xt with balanced bagging in every block fit (the blend partner), bagged x5", "clean",
+                                           two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "pos_bagging_fraction": 1.0, "neg_bagging_fraction": 0.1785}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_bbag_seedsBC": ("blocks_xt_bbag, seeds 5-14 (for the 15-seed bag)", "clean",
+                                                   two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "pos_bagging_fraction": 1.0, "neg_bagging_fraction": 0.1785}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True), tuple(range(5, 15))),
+    # round 29 (2026-10-24, plan_step11.md): xt_bbag failed the CV veto; the second pick. Interaction constraints in model B
+    # on the xt_unbal recipe: each tree splits on the row's own raw columns only or on the neighbour columns only
+    "B15_nbfeat_all_goof_xt_inter": ("xt_unbal with model-B interaction constraints: every tree uses the raw columns or the neighbour columns (6 scores + 318 means), never both, bagged x5", "clean",
+                                     two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_inter=True), BAG5),
+    "B15_nbfeat_all_goof_xt_inter_seedsBC": ("xt_inter, seeds 5-14 (for the 15-seed bag)", "clean",
+                                             two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_inter=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_blocks_xt_inter": ("blocks_xt_unbal with interaction constraints (raw vs neighbour columns) in every block fit (the blend partner), bagged x5", "clean",
+                                            two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True, b_inter=True), BAG5),
+    "B15_nbfeat_all_goof_blocks_xt_inter_seedsBC": ("blocks_xt_inter, seeds 5-14 (for the 15-seed bag)", "clean",
+                                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "is_unbalance": True}, b_estimators=300, a_oof="group", nb_feats=159, b_blocks=True, b_inter=True), tuple(range(5, 15))),
+    "B15_nbfeat_all_goof_xt_mcs100": ("xt with model-B min_child_samples 100 (vs 40: larger leaves), bagged x5", "clean",
+                                      two_stage(14, b_params={**B15_PARAMS, "extra_trees": True, "min_child_samples": 100}, b_estimators=300, a_oof="group", nb_feats=159), BAG5),
     # step 12 (docs/plans/plan_step12_dro.md, user-approved 2026-10-18): Group DRO over window steps for model B
     "B15_nbfeat_all_goof_xt_dro": ("B15_nbfeat_all_goof_xt with Group DRO row weights for model B (worst-step reweighting: eta 1.0, 3 rounds, step risk 1 - OOF AUC shrunk by its s.e., weight ratio <= 8, ESS >= 0.65), bagged x5", "clean",
                                    two_stage(14, b_params={**B15_PARAMS, "extra_trees": True}, b_estimators=300, a_oof="group", nb_feats=159,
