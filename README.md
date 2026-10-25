@@ -59,7 +59,7 @@ Open it in Jupyter or VS Code and run all cells, or from the shell:
 
 | setting | default | effect |
 |---|---|---|
-| `CONFIG["class_weights"]` | three weightings | `{"balanced": dict(is_unbalance=True)}` reproduces **Final 2** (2 members, about 10 minutes) |
+| Final 2 line below `CONFIG` | commented out | uncomment `CONFIG["class_weights"] = {"balanced": dict(is_unbalance=True)}` to reproduce **Final 2** (2 members, about 10 minutes) |
 | `CONFIG["extra_windows"]` | `()` | `(21,)` adds the six members refitted on 21 steps (`fam_F1_wavg_win`, scored 0.97034, not selected; about 30 minutes) |
 | `FAST` | `False` | `True`: 2 seeds for the submission and 1 for validation, a quick check run (not the uploaded file) |
 | `USE_GPU` | `False` | `True`: LightGBM GPU learner where available (Kaggle); results then differ slightly from the uploaded file |
