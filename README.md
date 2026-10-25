@@ -12,7 +12,7 @@ weightings, 15 seeds each, are rank-averaged.
 | selection | file | public ROC AUC |
 |---|---|---|
 | Final 1 | `fam_F1_wavg.csv` (the six members above) | 0.97066 |
-| Final 2 | `fam_F1_wavg_win.csv` (the six members + the same six fitted on 21 steps) | 0.97034 |
+| Final 2 | `fam_F1_unbal.csv` (the two variants at the balanced class weight only) | 0.97020 |
 
 ## Quick start
 
@@ -59,13 +59,14 @@ Open it in Jupyter or VS Code and run all cells, or from the shell:
 
 | setting | default | effect |
 |---|---|---|
-| `CONFIG["extra_windows"]` | `()` | `(21,)` reproduces **Final 2** (12 members, about 30 minutes) |
+| `CONFIG["class_weights"]` | three weightings | `{"balanced": dict(is_unbalance=True)}` reproduces **Final 2** (2 members, about 10 minutes) |
+| `CONFIG["extra_windows"]` | `()` | `(21,)` adds the six members refitted on 21 steps (`fam_F1_wavg_win`, scored 0.97034, not selected; about 30 minutes) |
 | `FAST` | `False` | `True`: 2 seeds for the submission and 1 for validation, a quick check run (not the uploaded file) |
 | `USE_GPU` | `False` | `True`: LightGBM GPU learner where available (Kaggle); results then differ slightly from the uploaded file |
 
 **Reproducibility check.** At the end of section 3 the notebook compares its output with the uploaded files if they
 are present (in `submissions/` locally, or attached as a dataset on Kaggle). It prints
-`reproduced 7 of 7 uploaded files exactly` for Final 1 (13 of 13 for Final 2) and stops with an error if any file
+`reproduced 7 of 7 uploaded files exactly` for Final 1 (3 of 3 for Final 2) and stops with an error if any file
 differs by more than 1e-9. In a fresh clone `submissions/` is empty (gitignored), so each file is reported as
 "not found here, not checked" and the run still completes.
 
@@ -108,5 +109,4 @@ docs/
   plans/                   step plans 1-12
   figures/                 model diagram and its script
 submissions/  artifacts/   generated CSVs, CV tables and caches (gitignored)
-CLAUDE.md                  working rules and project history for coding agents
 ```
